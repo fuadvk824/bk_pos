@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Models\Product;
 use Illuminate\Database\Seeder;
 
-class BarcodeSeeder extends Seeder
+class Barcode extends Seeder
 {
     public function run(): void
     {

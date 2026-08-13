@@ -2,12 +2,12 @@
 
 namespace App\Console\Commands;
 
+use Database\Seeders\Barcode;
 use Illuminate\Console\Command;
 use Database\Seeders\StoreSeeder;
 use Database\Seeders\CategorySeeder;
 use Database\Seeders\ProductSeeder;
 use Database\Seeders\PriceSeeder;
-use Database\Seeders\BarcodeSeeder;
 
 class SyncData extends Command
 {
@@ -36,7 +36,7 @@ class SyncData extends Command
             $this->call(PriceSeeder::class);
 
             $this->info('5. Sync Barcode...');
-            $this->call(BarcodeSeeder::class);
+            $this->call(Barcode::class);
 
             $this->newLine();
 
