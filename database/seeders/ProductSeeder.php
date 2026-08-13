@@ -130,6 +130,10 @@ class ProductSeeder extends Seeder
                         'store_id'   => $store->id,
                         'stock'      => $stock,
                         'price_all'  => $priceAll,
+
+                        'price'      => 0,
+                        'discount'   => 0,
+
                         'created_at' => $now,
                         'updated_at' => $now,
                     ]);
