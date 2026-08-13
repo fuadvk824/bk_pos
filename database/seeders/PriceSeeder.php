@@ -11,16 +11,23 @@ class PriceSeeder extends Seeder
 {
     public function run(): void
     {
-        $stores = Store::select('id', 'store_code')->get();
+        $stores = Store::select(
+            'id',
+            'store_code'
+        )->get();
 
         if ($stores->isEmpty()) {
-            $this->command->warn('Store kosong, jalankan StoreSeeder terlebih dahulu.');
+
+            $this->warn(
+                'Store kosong, jalankan StoreSeeder terlebih dahulu.'
+            );
+
             return;
         }
 
         foreach ($stores as $store) {
 
-            $this->command->info(
+            $this->info(
                 "Memproses price store: {$store->store_code}"
             );
 
@@ -31,7 +38,10 @@ class PriceSeeder extends Seeder
                     '=',
                     'product_store.product_id'
                 )
-                ->where('product_store.store_id', $store->id)
+                ->where(
+                    'product_store.store_id',
+                    $store->id
+                )
                 ->select(
                     'product_store.product_id',
                     'product_store.store_id',
@@ -54,7 +64,8 @@ class PriceSeeder extends Seeder
                         );
 
                     if ($response->failed()) {
-                        $this->command->error(
+
+                        $this->error(
                             "Gagal price: {$store->store_code} - {$ps->product_code}"
                         );
 
@@ -62,6 +73,16 @@ class PriceSeeder extends Seeder
                     }
 
                     $data = $response->json();
+
+                    if (!is_array($data)) {
+
+                        $this->error(
+                            "Response price tidak valid: {$store->store_code} - {$ps->product_code}"
+                        );
+
+                        continue;
+                    }
+
                     $unit = $data['unit'] ?? null;
 
                     if ($unit) {
@@ -84,27 +105,51 @@ class PriceSeeder extends Seeder
                     }
 
                     $retail = collect($data['prices'])
-                        ->firstWhere('level', 'Retail');
+                        ->firstWhere(
+                            'level',
+                            'Retail'
+                        );
 
                     if (!$retail) {
                         continue;
                     }
 
-                    $price = is_numeric($retail['harga1'] ?? null)
+                    $price = is_numeric(
+                        $retail['harga1'] ?? null
+                    )
                         ? $retail['harga1']
                         : 0;
 
-                    $discount = is_numeric($retail['disc1'] ?? null)
+                    $discount = is_numeric(
+                        $retail['disc1'] ?? null
+                    )
                         ? $retail['disc1']
                         : 0;
 
                     DB::table('product_store')
-                        ->where('product_id', $ps->product_id)
-                        ->where('store_id', $store->id)
-                        ->where(function ($query) use ($price, $discount) {
+                        ->where(
+                            'product_id',
+                            $ps->product_id
+                        )
+                        ->where(
+                            'store_id',
+                            $store->id
+                        )
+                        ->where(function ($query) use (
+                            $price,
+                            $discount
+                        ) {
                             $query
-                                ->where('price', '!=', $price)
-                                ->orWhere('discount', '!=', $discount);
+                                ->where(
+                                    'price',
+                                    '!=',
+                                    $price
+                                )
+                                ->orWhere(
+                                    'discount',
+                                    '!=',
+                                    $discount
+                                );
                         })
                         ->update([
                             'price'      => $price,
@@ -113,7 +158,7 @@ class PriceSeeder extends Seeder
                         ]);
                 } catch (\Throwable $e) {
 
-                    $this->command->error(
+                    $this->error(
                         "Error {$store->store_code} - {$ps->product_code}: "
                             . $e->getMessage()
                     );
@@ -122,15 +167,37 @@ class PriceSeeder extends Seeder
                 }
             }
 
-            $this->command->info(
+            $this->info(
                 "Price selesai store: {$store->store_code}"
             );
         }
 
-        $this->command->info('PriceSeeder selesai.');
+        $this->info(
+            'PriceSeeder selesai.'
+        );
+    }
+
+    private function info(string $message): void
+    {
+        if ($this->command) {
+            $this->command->info($message);
+        }
+    }
+
+    private function warn(string $message): void
+    {
+        if ($this->command) {
+            $this->command->warn($message);
+        }
+    }
+
+    private function error(string $message): void
+    {
+        if ($this->command) {
+            $this->command->error($message);
+        }
     }
 }
-
 
 
 

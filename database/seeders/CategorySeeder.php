@@ -6,6 +6,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use App\Models\Store;
+use Carbon\Carbon;
 
 class CategorySeeder extends Seeder
 {
@@ -14,7 +15,7 @@ class CategorySeeder extends Seeder
         $stores = Store::select('store_code')->get();
 
         if ($stores->isEmpty()) {
-            $this->command->warn(
+            $this->warn(
                 'Data store kosong, jalankan StoreSeeder terlebih dahulu.'
             );
 
@@ -35,7 +36,7 @@ class CategorySeeder extends Seeder
                 );
 
             if ($response->failed()) {
-                $this->command->error(
+                $this->error(
                     "Gagal ambil kategori WHID: {$whid}"
                 );
 
@@ -45,40 +46,76 @@ class CategorySeeder extends Seeder
             $categories = $response->json();
 
             if (!is_array($categories)) {
-                $this->command->error(
+                $this->error(
                     "Response kategori tidak valid WHID: {$whid}"
                 );
 
                 continue;
             }
 
-            foreach ($categories as $cat) {
+            foreach ($categories as $category) {
 
                 if (
-                    !isset($cat['itgrpid']) ||
-                    !isset($cat['itgrpname'])
+                    !isset($category['itgrpid']) ||
+                    !isset($category['itgrpname'])
                 ) {
                     continue;
                 }
 
-                DB::table('categories')->updateOrInsert(
-                    [
-                        'category_code' => $cat['itgrpid'],
-                    ],
-                    [
-                        'name'       => trim($cat['itgrpname']),
-                        'updated_at' => now(),
-                    ]
-                );
+                $categoryCode = $category['itgrpid'];
+                $categoryName = trim($category['itgrpname']);
+
+                $existingCategory = DB::table('categories')
+                    ->where('category_code', $categoryCode)
+                    ->first();
+
+                $now = Carbon::now();
+
+                if ($existingCategory) {
+
+                    DB::table('categories')
+                        ->where('id', $existingCategory->id)
+                        ->update([
+                            'name'       => $categoryName,
+                            'updated_at' => $now,
+                        ]);
+                } else {
+
+                    DB::table('categories')->insert([
+                        'category_code' => $categoryCode,
+                        'name'          => $categoryName,
+                        'created_at'    => $now,
+                        'updated_at'    => $now,
+                    ]);
+                }
             }
 
-            $this->command->info(
+            $this->info(
                 "Kategori selesai WHID: {$whid}"
             );
         }
 
-        $this->command->info(
-            'CategorySeeder selesai.'
-        );
+        $this->info('CategorySeeder selesai.');
+    }
+
+    private function info(string $message): void
+    {
+        if ($this->command) {
+            $this->command->info($message);
+        }
+    }
+
+    private function warn(string $message): void
+    {
+        if ($this->command) {
+            $this->command->warn($message);
+        }
+    }
+
+    private function error(string $message): void
+    {
+        if ($this->command) {
+            $this->command->error($message);
+        }
     }
 }

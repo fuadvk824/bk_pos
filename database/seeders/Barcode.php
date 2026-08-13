@@ -15,12 +15,17 @@ class BarcodeSeeder extends Seeder
                 $product->update([
                     'barcode' => 'BKPOS:PRD:' . $product->id,
                 ]);
-
             });
 
-        $this->command->info(
+        $this->info(
             'BarcodeSeeder selesai.'
         );
     }
-}
 
+    private function info(string $message): void
+    {
+        if ($this->command) {
+            $this->command->info($message);
+        }
+    }
+}

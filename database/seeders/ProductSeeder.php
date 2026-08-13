@@ -17,7 +17,10 @@ class ProductSeeder extends Seeder
         $stores = Store::all();
 
         if ($stores->isEmpty()) {
-            $this->command->warn('Store kosong, jalankan StoreSeeder dulu');
+            $this->warn(
+                'Store kosong, jalankan StoreSeeder dulu.'
+            );
+
             return;
         }
 
@@ -26,20 +29,44 @@ class ProductSeeder extends Seeder
 
         foreach ($stores as $store) {
 
-            $response = Http::timeout(60)  // tunggu lebih lama
-                ->retry(3, 2000) // coba 3x, jeda 2 detik
-                ->get('https://bmp.my.id/bk/api/get_price_all.php', [
-                    'whid' => $store->store_code
-                ]);
+            $response = Http::timeout(60)
+                ->retry(3, 2000)
+                ->get(
+                    'https://bmp.my.id/bk/api/get_price_all.php',
+                    [
+                        'whid' => $store->store_code,
+                    ]
+                );
 
             if ($response->failed()) {
-                $this->command->error("Gagal WHID: {$store->store_code}");
+
+                $this->error(
+                    "Gagal WHID: {$store->store_code}"
+                );
+
                 continue;
             }
 
             $items = $response->json();
 
+            if (!is_array($items)) {
+
+                $this->error(
+                    "Response product tidak valid WHID: {$store->store_code}"
+                );
+
+                continue;
+            }
+
             foreach ($items as $item) {
+
+                if (
+                    !isset($item['itemid']) ||
+                    !isset($item['itemdesc']) ||
+                    !isset($item['itgrpid'])
+                ) {
+                    continue;
+                }
 
                 if (!isset($categories[$item['itgrpid']])) {
                     continue;
@@ -47,48 +74,111 @@ class ProductSeeder extends Seeder
 
                 $categoryId = $categories[$item['itgrpid']];
 
-                $product = Product::updateOrCreate(
-                    ['product_code' => $item['itemid']],
-                    [
-                        'category_id' => $categoryId,
-                        'name' => $item['itemdesc'],
-                        'description' => null,
-                        'image' => null,
-                        'barcode' => null,
-                    ]
-                );
+                $product = Product::where(
+                    'product_code',
+                    $item['itemid']
+                )->first();
 
-                DB::table('product_store')->updateOrInsert(
-                    [
+                $now = Carbon::now();
+
+                if ($product) {
+
+                    $product->update([
+                        'category_id' => $categoryId,
+                        'name'        => $item['itemdesc'],
+                        'description' => null,
+                        'image'       => null,
+                        'updated_at'  => $now,
+                    ]);
+                } else {
+
+                    $product = Product::create([
+                        'product_code' => $item['itemid'],
+                        'category_id'  => $categoryId,
+                        'name'         => $item['itemdesc'],
+                        'description'  => null,
+                        'image'        => null,
+                        'barcode'      => null,
+                        'stock_all'    => 0,
+                        'created_at'   => $now,
+                        'updated_at'   => $now,
+                    ]);
+                }
+
+                $productStore = DB::table('product_store')
+                    ->where('product_id', $product->id)
+                    ->where('store_id', $store->id)
+                    ->first();
+
+                $stock = $item['qty'] ?? 0;
+                $priceAll = $item['price'] ?? 0;
+
+                if ($productStore) {
+
+                    DB::table('product_store')
+                        ->where('product_id', $product->id)
+                        ->where('store_id', $store->id)
+                        ->update([
+                            'stock'      => $stock,
+                            'price_all'  => $priceAll,
+                            'updated_at' => $now,
+                        ]);
+                } else {
+
+                    DB::table('product_store')->insert([
                         'product_id' => $product->id,
-                        'store_id' => $store->id,
-                    ],
-                    [
-                        'stock' => $item['qty'],
-                        'price_all' => $item['price'],
-                        'updated_at' => Carbon::now(),
-                        // 'created_at' => Carbon::now(),//ini klw pertama buat aja on kn
-                    ]
-                );
+                        'store_id'   => $store->id,
+                        'stock'      => $stock,
+                        'price_all'  => $priceAll,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                }
 
                 if (!isset($totalStock[$product->id])) {
                     $totalStock[$product->id] = 0;
                 }
 
-                $totalStock[$product->id] += (int) $item['qty'];
+                $totalStock[$product->id] += (int) $stock;
             }
 
-            $this->command->info("Selesai store: {$store->store_code}");
+            $this->info(
+                "Selesai store: {$store->store_code}"
+            );
         }
 
         foreach ($totalStock as $productId => $stock) {
-            Product::where('id', $productId)->update([
-                'stock_all' => $stock
-            ]);
+
+            Product::where('id', $productId)
+                ->update([
+                    'stock_all'  => $stock,
+                    'updated_at' => Carbon::now(),
+                ]);
         }
 
-        $this->command->info('Seeder product & product_store selesai + stock_all updated');
+        $this->info(
+            'ProductSeeder selesai + stock_all updated.'
+        );
+    }
+
+    private function info(string $message): void
+    {
+        if ($this->command) {
+            $this->command->info($message);
+        }
+    }
+
+    private function warn(string $message): void
+    {
+        if ($this->command) {
+            $this->command->warn($message);
+        }
+    }
+
+    private function error(string $message): void
+    {
+        if ($this->command) {
+            $this->command->error($message);
+        }
     }
 }
-
- 

@@ -14,6 +14,7 @@
 /vendor
 .DS_Store
 .env
+info.tsx
 .env.backup
 .env.production
 .phpactor.json

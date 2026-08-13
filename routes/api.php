@@ -10,8 +10,25 @@ use App\Http\Controllers\Api\UserController;
 use App\Models\AppVersion;
 use Illuminate\Support\Facades\Route;
 
+// Route::get('/app-version', function () {
+//     $version = AppVersion::latest()->first();
+
+//     return response()->json([
+//         'version'      => $version->version,
+//         'apk_url'      => $version->apk_url,
+//         'force_update' => $version->force_update,
+//         'message'      => $version->message,
+//     ]);
+// });
+
 Route::get('/app-version', function () {
-    $version = AppVersion::latest()->first();
+    $version = AppVersion::where('force_update', true)->first();
+
+    if (!$version) {
+        return response()->json([
+            'message' => 'Versi aplikasi tidak ditemukan'
+        ], 404);
+    }
 
     return response()->json([
         'version'      => $version->version,
@@ -20,6 +37,7 @@ Route::get('/app-version', function () {
         'message'      => $version->message,
     ]);
 });
+
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {

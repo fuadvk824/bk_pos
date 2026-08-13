@@ -24,3 +24,4 @@ class VersionSeeder extends Seeder
     }
 }
  
+ 

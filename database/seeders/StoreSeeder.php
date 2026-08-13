@@ -11,23 +11,24 @@ class StoreSeeder extends Seeder
 {
     public function run(): void
     {
-        $response = Http::get(
-            'https://bmp.my.id/bk/api/get_whid.php'
-        );
+        $response = Http::timeout(30)
+            ->retry(3, 1000)
+            ->get('https://bmp.my.id/bk/api/get_whid.php');
 
         if ($response->failed()) {
-            $this->command->error('Gagal mengambil data store dari API');
+            $this->error('Gagal mengambil data store dari API');
             return;
         }
 
         $stores = $response->json();
 
         if (!is_array($stores)) {
-            $this->command->error('Response API tidak valid');
+            $this->error('Response API tidak valid');
             return;
         }
 
         foreach ($stores as $store) {
+
             if (
                 !isset($store['whid']) ||
                 !isset($store['whname'])
@@ -35,26 +36,55 @@ class StoreSeeder extends Seeder
                 continue;
             }
 
-            DB::table('stores')->updateOrInsert(
-                [
-                    'store_code' => $store['whid'],
-                ],
-                [
+            $storeCode = $store['whid'];
+            $storeName = trim($store['whname']);
+
+            $existingStore = DB::table('stores')
+                ->where('store_code', $storeCode)
+                ->first();
+
+            $now = Carbon::now();
+
+            if ($existingStore) {
+
+                DB::table('stores')
+                    ->where('id', $existingStore->id)
+                    ->update([
+                        'company_id' => 1,
+                        'name'       => $storeName,
+                        'address'    => null,
+                        'updated_at' => $now,
+                    ]);
+            } else {
+
+                DB::table('stores')->insert([
                     'company_id' => 1,
-                    'name' => trim($store['whname']),
-                    'address' => null,
-                    'created_at' => Carbon::now(),
-                    'updated_at' => Carbon::now(),
-                ]
-            );
+                    'store_code' => $storeCode,
+                    'name'       => $storeName,
+                    'address'    => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
         }
 
-        $this->command->info(
-            'Seeder stores berhasil dijalankan'
-        );
+        $this->info('StoreSeeder selesai.');
+    }
+
+    private function info(string $message): void
+    {
+        if ($this->command) {
+            $this->command->info($message);
+        }
+    }
+
+    private function error(string $message): void
+    {
+        if ($this->command) {
+            $this->command->error($message);
+        }
     }
 }
-
 
 // namespace Database\Seeders;
 
