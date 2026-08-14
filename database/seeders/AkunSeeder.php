@@ -10,14 +10,6 @@ class AkunSeeder extends Seeder
 }
 
 
-
-
-
-
-
-
-
-
 //https://bmp.my.id/bk/api/get_user.php?user=fuad123&pass=abc123        //user
 //https://bmp.my.id/bk/api/get_whid.php                                 //store
 //https://bmp.my.id/bk/api/get_kategori.php?whid=                       //category

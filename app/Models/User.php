@@ -6,8 +6,10 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Http\Request;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
@@ -46,5 +48,31 @@ class User extends Authenticatable
     public function payments()
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function scopeFilter(Builder $query, Request $request): Builder 
+    {
+        return $query
+            ->with([
+                'store:id,name',
+            ])
+            ->when(
+                $request->filled('search'),
+                function (Builder $query) use ($request) {
+                    $search = $request->search;
+
+                    $query->where(function (Builder $query) use ($search) {
+                        $query
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('username', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
+                }
+            )
+            ->when(
+                $request->filled('store_id'),
+                fn(Builder $query) =>
+                $query->where('store_id', $request->store_id)
+            );
     }
 }

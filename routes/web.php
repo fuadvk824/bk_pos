@@ -6,6 +6,7 @@ use App\Http\Controllers\Web\ProductController;
 use App\Http\Controllers\Web\ReportController;
 use App\Http\Controllers\Web\StoreController;
 use App\Http\Controllers\Web\TransactionController;
+use App\Http\Controllers\Web\UserController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
@@ -69,6 +70,19 @@ Route::middleware(['auth', 'verified', 'role:super-admin|admin'])->group(functio
         ->name('report.')
         ->group(function () {
             Route::get('/', [ReportController::class, 'index'])->name('index');
+        });
+
+    Route::prefix('user')
+        ->name('user.')
+        ->group(function () {
+            Route::get('/', [UserController::class, 'index'])->name('index');
+            Route::get('/create', [UserController::class, 'create'])->name('create');
+            Route::post('/store', [UserController::class, 'store'])->name('store');
+            Route::get('/{user}/edit', [UserController::class, 'edit'])->name('edit');
+            Route::put('/{user}', [UserController::class, 'update'])->name('update');
+            Route::delete('/{user}', [UserController::class, 'destroy'])->name('destroy');
+            Route::patch('/{user}/status', [UserController::class, 'updateStatus'])->name('updateStatus');
+            Route::patch('/{user}/reset-status', [UserController::class, 'resetStatus'])->name('resetStatus');
         });
 });
 

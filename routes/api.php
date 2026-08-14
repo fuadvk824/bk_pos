@@ -59,6 +59,10 @@ Route::middleware('auth:sanctum')->group(function () {
         '/transactions/{transaction}/driver',
         [TransactionController::class, 'updateDriver']
     );
+    Route::patch(
+        '/transactions/{transaction}/notes',
+        [TransactionController::class, 'updateNotes']
+    );
 
     Route::post('/checkout', [CashierController::class, 'store']);
     Route::get('/customers/search', [CashierController::class, 'search']);

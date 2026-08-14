@@ -74,6 +74,11 @@ const mainNavItems: NavItem[] = [
         href: '/report',
         icon: FileText,
     },
+    {
+        title: 'Member Kasir',
+        href: '/users',
+        icon: FileText,
+    },
 ];
 
 const footerNavItems: NavItem[] = [

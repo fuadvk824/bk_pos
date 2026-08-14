@@ -52,7 +52,6 @@ class StoreSeeder extends Seeder
                     ->update([
                         'company_id' => 1,
                         'name'       => $storeName,
-                        'address'    => null,
                         'updated_at' => $now,
                     ]);
             } else {

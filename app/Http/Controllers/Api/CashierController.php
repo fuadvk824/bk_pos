@@ -12,6 +12,7 @@ use App\Models\TransactionItem;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class CashierController extends Controller
 {
@@ -19,9 +20,6 @@ class CashierController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-
-            // 'store_id' => ['required', 'exists:stores,id'],
-
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:20'],
             'address' => ['nullable', 'string'],
@@ -75,7 +73,7 @@ class CashierController extends Controller
             }
 
             $transaction = Transaction::create([
-                'invoice_number' => 'INV-' . now()->format('YmdHis'),
+                'invoice_number' => 'INV-' . now()->format('ymd') . '-' . strtoupper(Str::random(3)) . now()->format('Hi'),
                 'user_id' => Auth::id(),
                 'store_id' => $storeId,
                 'customer_id' => $customer->id,
@@ -209,30 +207,19 @@ class CashierController extends Controller
             ], 422);
         }
         $validated = $request->validate([
-
-            // 'driver_name' => ['nullable', 'string', 'max:255'],
-            // 'delivery_type' => ['nullable', 'in:pickup,delivery'],
-            // 'shipping_cost' => ['nullable', 'numeric', 'min:0'],
             'driver_name' => ['nullable', 'string', 'max:255'],
             'delivery_type' => ['required', 'in:pickup,delivery'],
             'shipping_cost' => ['nullable', 'numeric', 'min:0'],
-            'payment_method' => [
-                'required',
-                'in:cash,transfer,qris'
-            ],
-
-            'amount' => [
-                'required',
-                'numeric',
-                'min:1'
-            ],
+            'notes' => ['nullable', 'string'],
+            'payment_method' => ['required', 'in:cash,transfer,qris'],
+            'amount' => ['required', 'numeric', 'min:1'],
         ]);
-        if (
-            $validated['delivery_type'] === 'delivery'
-            && empty($validated['driver_name'])
-        ) {
-            throw new \Exception("Driver wajib diisi.");
-        }
+        // if (
+        //     $validated['delivery_type'] === 'delivery'
+        //     && empty($validated['driver_name'])
+        // ) {
+        //     throw new \Exception("Driver wajib diisi.");
+        // }
 
         if (
             $validated['delivery_type'] === 'delivery'
@@ -244,65 +231,36 @@ class CashierController extends Controller
         DB::beginTransaction();
 
         try {
-
-            // if ($transaction->payment_status == "unpaid") {
-
-            //     if (!empty($validated['delivery_type'])) {
-            //         logger('delivery_type unpaid');
-            //         $transaction->delivery_type =
-            //             $validated['delivery_type'];
-            //     }
-            //     if (
-            //         $transaction->delivery_type == "delivery"
-            //     ) {
-            //         logger('delivery unpaid');
-            //         $transaction->shipping_cost =
-            //             $validated['shipping_cost'] ?? 0;
-            //     } else {
-            //         logger('else unpaid');
-            //         $transaction->shipping_cost = 0;
-            //     }
-
-            //     $transaction->total =
-            //         $transaction->subtotal +
-            //         $transaction->shipping_cost -
-            //         ($transaction->points_used ?? 0);
-            // }
-            // Delivery Type boleh diubah selama transaksi belum lunas
             $transaction->delivery_type = $validated['delivery_type'];
 
             if ($validated['delivery_type'] === 'delivery') {
-
                 $transaction->shipping_cost =
                     $validated['shipping_cost'] ?? 0;
 
                 $transaction->driver_name =
                     $validated['driver_name'] ?? null;
             } else {
-
                 $transaction->shipping_cost = 0;
-
-                // pickup -> driver harus dikosongkan
                 $transaction->driver_name = null;
             }
+            $transaction->notes =
+                isset($validated['notes'])
+                ? trim($validated['notes'])
+                : $transaction->notes;
 
-            // hitung ulang total
             $transaction->total =
                 $transaction->subtotal +
                 $transaction->shipping_cost -
                 ($transaction->points_used ?? 0);
 
-            // if (!empty($validated['driver_name'])) {
-            //     $transaction->driver_name =
-            //         $validated['driver_name'];
-            // }
+            $paid = $transaction->payments()->sum('amount');
+            $remaining = $transaction->total - $paid;
 
-            $paid = $transaction
-                ->payments()
-                ->sum('amount');
-
-            $remaining =
-                $transaction->total - $paid;
+            if ($remaining <= 0) {
+                throw new \Exception(
+                    'Transaksi sudah tidak memiliki sisa tagihan.'
+                );
+            }
 
             if ($validated['amount'] > $remaining) {
                 throw new \Exception(
@@ -313,15 +271,11 @@ class CashierController extends Controller
             Payment::create([
                 'transaction_id' => $transaction->id,
                 'user_id' => Auth::id(),
-                'payment_method' =>
-                $validated['payment_method'],
+                'payment_method' => $validated['payment_method'],
                 'amount' => $validated['amount']
-
             ]);
 
-            $paid = $transaction
-                ->payments()
-                ->sum('amount');
+            $paid = $transaction->payments()->sum('amount');
 
             if ($paid <= 0) {
                 $transaction->payment_status = "unpaid";
@@ -331,6 +285,7 @@ class CashierController extends Controller
                 $transaction->payment_status = "paid";
             }
 
+            //update done
             $transaction->save();
 
 
@@ -400,4 +355,3 @@ class CashierController extends Controller
         ]);
     }
 }
-

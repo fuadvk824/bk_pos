@@ -213,12 +213,12 @@ class TransactionController extends Controller
             abort(403, 'Akses ditolak');
         }
 
-        if ($transaction->payment_status !== 'paid') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Update driver khusus untuk transaksi yang sudah paid.',
-            ], 422);
-        }
+        // if ($transaction->payment_status !== 'paid') {
+        //     return response()->json([
+        //         'success' => false,
+        //         'message' => 'Update driver khusus untuk transaksi yang sudah paid.',
+        //     ], 422);
+        // }
 
         if ($transaction->delivery_type !== 'delivery') {
             return response()->json([
@@ -245,6 +245,41 @@ class TransactionController extends Controller
             'data' => [
                 'transaction_id' => $transaction->id,
                 'driver_name' => $transaction->driver_name,
+            ],
+        ]);
+    }
+    
+    public function updateNotes(
+        Request $request,
+        Transaction $transaction
+    ) {
+        $user = $request->user();
+
+        if (
+            $user->store_id &&
+            $transaction->store_id != $user->store_id
+        ) {
+            abort(403, 'Akses ditolak');
+        }
+
+        $validated = $request->validate([
+            'notes' => [
+                'nullable',
+                'string',
+                'max:1000',
+            ],
+        ]);
+
+        $transaction->update([
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Catatan transaksi berhasil diperbarui.',
+            'data' => [
+                'transaction_id' => $transaction->id,
+                'notes' => $transaction->notes,
             ],
         ]);
     }
