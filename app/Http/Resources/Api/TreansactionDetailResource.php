@@ -44,6 +44,8 @@ class TreansactionDetailResource extends JsonResource
             'store' => [
                 'name' => $this->store?->name,
                 'address' => $this->store?->address,
+                'email' => $this->store?->email,
+                'phone' => $this->store?->phone,
             ],
 
             'company' => [

@@ -11,7 +11,8 @@ class Store extends Model
         'company_id',
         'name',
         'address',
-        'email'
+        'email',
+        'phone'
     ];
 
     public function users()

@@ -18,6 +18,8 @@ return new class extends Migration
                 ->cascadeOnDelete();
             $table->string('store_code')->unique(); // whid
             $table->string('name')->index();        // whname
+            $table->string('phone')->index();
+            $table->string('email')->index();
             $table->text('address')->nullable();
 
             $table->timestamps();
