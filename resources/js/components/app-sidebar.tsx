@@ -3,6 +3,7 @@ import {
     Banknote,
     BookOpen,
     Calculator,
+    Contact,
     FilePenLine,
     FileText,
     FolderGit2,
@@ -10,6 +11,7 @@ import {
     Logs,
     PackageSearch,
     Store,
+    UserPen,
     Users,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
@@ -67,7 +69,7 @@ const mainNavItems: NavItem[] = [
     {
         title: 'Customer',
         href: '/customer',
-        icon: Users,
+        icon: Contact,
     },
     {
         title: 'Report @',
@@ -76,8 +78,8 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Member Kasir',
-        href: '/users',
-        icon: FileText,
+        href: '/user',
+        icon: Users,
     },
 ];
 

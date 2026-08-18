@@ -1,11 +1,20 @@
 import { useForm } from '@inertiajs/react';
-import { route } from 'ziggy-js';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import {
+    DialogFooter,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { DialogFooter } from '@/components/ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { useRoute } from '@/lib/route-ziggy';
 
 interface StoreOption {
     id: number;
@@ -14,22 +23,40 @@ interface StoreOption {
 
 interface Props {
     close: () => void;
-
     stores: StoreOption[];
-
     initialData?: {
         id?: number;
         name: string;
         username?: string;
         email: string;
-        store_id?: number;
+        store_id?: number | null;
     };
 }
 
-export default function Form({ close, stores, initialData }: Props) {
+export default function Form({
+    close,
+    stores,
+    initialData,
+}: Props) {
+    const route = useRoute();
     const isEdit = !!initialData?.id;
 
-    const { data, setData, post, put, processing, errors, reset } = useForm({
+    const {
+        data,
+        setData,
+        post,
+        put,
+        processing,
+        errors,
+        reset,
+    } = useForm<{
+        name: string;
+        username: string;
+        email: string;
+        store_id: number | '';
+        password: string;
+        password_confirmation: string;
+    }>({
         name: initialData?.name ?? '',
         username: initialData?.username ?? '',
         email: initialData?.email ?? '',
@@ -61,14 +88,18 @@ export default function Form({ close, stores, initialData }: Props) {
 
             onSuccess: (page: any) => {
                 handleToast(page);
-
                 close();
                 reset();
             },
         };
 
         if (isEdit && initialData?.id) {
-            put(route('user.update', initialData.id), options);
+            put(
+                route('user.update', {
+                    user: initialData.id,
+                }),
+                options,
+            );
         } else {
             post(route('user.store'), options);
         }
@@ -78,141 +109,195 @@ export default function Form({ close, stores, initialData }: Props) {
         data.name.trim() !== '' &&
         data.username.trim() !== '' &&
         data.email.trim() !== '' &&
-        data.store_id !== '';
+        data.store_id !== '' &&
+        (!isEdit
+            ? data.password.trim() !== '' &&
+              data.password_confirmation.trim() !== ''
+            : true);
 
     return (
-        <form onSubmit={submit} className="mt-4 space-y-4">
-            {/* NAMA */}
-            <div className="grid grid-cols-3 items-center gap-3">
-                <Label>Nama*</Label>
+        <form
+            onSubmit={submit}
+            className="space-y-5"
+        >
+            <div>
+                <Label htmlFor="name">
+                    Nama <span className="text-destructive">*</span>
+                </Label>
 
-                <div className="col-span-2">
-                    <Input
-                        value={data.name}
-                        onChange={(e) => setData('name', e.target.value)}
-                        placeholder="Nama user"
-                    />
+                <Input
+                    id="name"
+                    value={data.name}
+                    onChange={(e) =>
+                        setData('name', e.target.value)
+                    }
+                    placeholder="Masukkan nama user"
+                    aria-invalid={!!errors.name}
+                />
 
-                    {errors.name && (
-                        <p className="text-sm text-red-500">{errors.name}</p>
-                    )}
-                </div>
+                {errors.name && (
+                    <p className="text-sm text-destructive">
+                        {errors.name}
+                    </p>
+                )}
             </div>
 
-            {/* USERNAME */}
-            <div className="grid grid-cols-3 items-center gap-3">
-                <Label>Username*</Label>
+            <div>
+                <Label htmlFor="username">
+                    Username{' '}
+                    <span className="text-destructive">*</span>
+                </Label>
 
-                <div className="col-span-2">
-                    <Input
-                        value={data.username}
-                        onChange={(e) => setData('username', e.target.value)}
-                        placeholder="Username"
-                    />
+                <Input
+                    id="username"
+                    value={data.username}
+                    onChange={(e) =>
+                        setData('username', e.target.value)
+                    }
+                    placeholder="Masukkan username"
+                    aria-invalid={!!errors.username}
+                />
 
-                    {errors.username && (
-                        <p className="text-sm text-red-500">
-                            {errors.username}
-                        </p>
-                    )}
-                </div>
+                {errors.username && (
+                    <p className="text-sm text-destructive">
+                        {errors.username}
+                    </p>
+                )}
             </div>
 
-            {/* EMAIL */}
-            <div className="grid grid-cols-3 items-center gap-3">
-                <Label>Email*</Label>
+            <div>
+                <Label htmlFor="email">
+                    Email <span className="text-destructive">*</span>
+                </Label>
 
-                <div className="col-span-2">
-                    <Input
-                        type="email"
-                        value={data.email}
-                        onChange={(e) => setData('email', e.target.value)}
-                        placeholder="Email"
-                    />
+                <Input
+                    id="email"
+                    type="email"
+                    value={data.email}
+                    onChange={(e) =>
+                        setData('email', e.target.value)
+                    }
+                    placeholder="contoh@email.com"
+                    aria-invalid={!!errors.email}
+                />
 
-                    {errors.email && (
-                        <p className="text-sm text-red-500">{errors.email}</p>
-                    )}
-                </div>
+                {errors.email && (
+                    <p className="text-sm text-destructive">
+                        {errors.email}
+                    </p>
+                )}
             </div>
 
-            {/* STORE */}
-            <div className="grid grid-cols-3 items-center gap-3">
-                <Label>Store*</Label>
+            <div>
+                <Label htmlFor="store">
+                    Store <span className="text-destructive">*</span>
+                </Label>
 
-                <div className="col-span-2">
-                    <select
-                        value={data.store_id}
-                        onChange={(e) =>
-                            setData(
-                                'store_id',
-                                e.target.value ? Number(e.target.value) : '',
-                            )
+                <Select
+                    value={
+                        data.store_id !== ''
+                            ? String(data.store_id)
+                            : undefined
+                    }
+                    onValueChange={(value) =>
+                        setData('store_id', Number(value))
+                    }
+                >
+                    <SelectTrigger
+                        id="store"
+                        className={
+                            errors.store_id
+                                ? 'border-destructive'
+                                : ''
                         }
-                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                     >
-                        <option value="">Pilih Store</option>
+                        <SelectValue placeholder="Pilih store" />
+                    </SelectTrigger>
 
+                    <SelectContent align='start'>
                         {stores.map((store) => (
-                            <option key={store.id} value={store.id}>
+                            <SelectItem
+                                key={store.id}
+                                value={String(store.id)}
+                            >
                                 {store.name}
-                            </option>
+                            </SelectItem>
                         ))}
-                    </select>
+                    </SelectContent>
+                </Select>
 
-                    {errors.store_id && (
-                        <p className="text-sm text-red-500">
-                            {errors.store_id}
-                        </p>
-                    )}
-                </div>
+                {errors.store_id && (
+                    <p className="text-sm text-destructive">
+                        {errors.store_id}
+                    </p>
+                )}
             </div>
 
-            {/* PASSWORD */}
-            <div className="grid grid-cols-3 items-center gap-3">
-                <div className="flex flex-col gap-1">
-                    <Label>Password</Label>
+            <div>
+                <div>
+                    <Label htmlFor="password">
+                        Password
+                    </Label>
 
                     {isEdit && (
-                        <Label className="text-xs text-[#919191]">
-                            Kosongkan jika tidak diubah
-                        </Label>
-                    )}
-                </div>
-
-                <div className="col-span-2">
-                    <Input
-                        type="password"
-                        value={data.password}
-                        onChange={(e) => setData('password', e.target.value)}
-                        placeholder={isEdit ? 'Password baru' : 'Password'}
-                    />
-
-                    {errors.password && (
-                        <p className="text-sm text-red-500">
-                            {errors.password}
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Kosongkan jika password tidak ingin
+                            diubah.
                         </p>
                     )}
                 </div>
+
+                <Input
+                    id="password"
+                    type="password"
+                    value={data.password}
+                    onChange={(e) =>
+                        setData('password', e.target.value)
+                    }
+                    placeholder={
+                        isEdit
+                            ? 'Masukkan password baru'
+                            : 'Masukkan password'
+                    }
+                    aria-invalid={!!errors.password}
+                />
+
+                {errors.password && (
+                    <p className="text-sm text-destructive">
+                        {errors.password}
+                    </p>
+                )}
             </div>
 
-            {/* CONFIRM PASSWORD */}
-            <div className="grid grid-cols-3 items-center gap-3">
-                <Label>Konfirmasi</Label>
+            <div>
+                <Label htmlFor="password_confirmation">
+                    Konfirmasi Password
+                </Label>
 
-                <div className="col-span-2">
-                    <Input
-                        type="password"
-                        value={data.password_confirmation}
-                        onChange={(e) =>
-                            setData('password_confirmation', e.target.value)
-                        }
-                        placeholder="Konfirmasi password"
-                    />
-                </div>
+                <Input
+                    id="password_confirmation"
+                    type="password"
+                    value={data.password_confirmation}
+                    onChange={(e) =>
+                        setData(
+                            'password_confirmation',
+                            e.target.value,
+                        )
+                    }
+                    placeholder="Ulangi password"
+                    aria-invalid={
+                        !!errors.password_confirmation
+                    }
+                />
+
+                {errors.password_confirmation && (
+                    <p className="text-sm text-destructive">
+                        {errors.password_confirmation}
+                    </p>
+                )}
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="pt-3">
                 <Button
                     type="button"
                     variant="outline"
@@ -222,8 +307,15 @@ export default function Form({ close, stores, initialData }: Props) {
                     Batal
                 </Button>
 
-                <Button type="submit" disabled={processing || !isValid}>
-                    {processing ? 'Menyimpan...' : 'Simpan'}
+                <Button
+                    type="submit"
+                    disabled={processing || !isValid}
+                >
+                    {processing
+                        ? 'Menyimpan...'
+                        : isEdit
+                          ? 'Perbarui'
+                          : 'Simpan'}
                 </Button>
             </DialogFooter>
         </form>

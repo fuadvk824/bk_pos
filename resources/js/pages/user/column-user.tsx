@@ -3,7 +3,6 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { MoreHorizontal, SquarePen, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { route } from 'ziggy-js';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,6 +29,8 @@ import {
 
 import type { User } from '@/types/custom/user';
 
+type RouteFunction = (name: string, params?: Record<string, unknown>) => string;
+
 const handleToast = (page: any) => {
     const flash = page.props.flash as {
         success?: string;
@@ -45,20 +46,24 @@ const handleToast = (page: any) => {
     }
 };
 
-const deleteUser = (id: number) => {
+const deleteUser = (id: number, route: RouteFunction) => {
     router.delete(
         route('user.destroy', {
             user: id,
         }),
         {
             preserveScroll: true,
-            onSuccess: handleToast,
+
+            onSuccess: (page) => {
+                handleToast(page);
+            },
         },
     );
 };
 
 export const columnUsers = (
     onEdit: (user: User) => void,
+    route: RouteFunction,
 ): ColumnDef<User>[] => [
     {
         id: 'select',
@@ -87,7 +92,6 @@ export const columnUsers = (
 
     {
         accessorKey: 'name',
-
         header: 'Nama Kasir',
 
         cell: ({ row }) => row.getValue('name') ?? '-',
@@ -95,7 +99,6 @@ export const columnUsers = (
 
     {
         accessorKey: 'email',
-
         header: 'Email',
 
         cell: ({ row }) => row.getValue('email') ?? '-',
@@ -103,7 +106,6 @@ export const columnUsers = (
 
     {
         accessorKey: 'username',
-
         header: 'Username',
 
         cell: ({ row }) => row.getValue('username') ?? '-',
@@ -111,7 +113,6 @@ export const columnUsers = (
 
     {
         accessorKey: 'store',
-
         header: 'Store',
 
         cell: ({ row }) => row.getValue('store') ?? '-',
@@ -132,7 +133,7 @@ export const columnUsers = (
             const [openDelete, setOpenDelete] = useState(false);
 
             const handleDelete = () => {
-                deleteUser(user.id);
+                deleteUser(user.id, route);
 
                 setOpenDelete(false);
                 setOpenDropdown(false);
@@ -151,7 +152,6 @@ export const columnUsers = (
                         </DropdownMenuTrigger>
 
                         <DropdownMenuContent align="end">
-                            {/* EDIT */}
                             <DropdownMenuItem
                                 onClick={() => onEdit(user)}
                                 className="cursor-pointer"
@@ -160,7 +160,6 @@ export const columnUsers = (
                                 Edit
                             </DropdownMenuItem>
 
-                            {/* DELETE */}
                             <AlertDialog
                                 open={openDelete}
                                 onOpenChange={setOpenDelete}

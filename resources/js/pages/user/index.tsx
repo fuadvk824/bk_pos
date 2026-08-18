@@ -47,13 +47,11 @@ interface Props {
 
 export default function Index({ users, filters, stores }: Props) {
     const route = useRoute();
-
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
         {},
     );
 
     const [isRefreshing, setIsRefreshing] = useState(false);
-
     const allColumns = ['name', 'email', 'username', 'store'];
 
     const [localFilters, setLocalFilters] = useState({
@@ -117,7 +115,6 @@ export default function Index({ users, filters, stores }: Props) {
             <Head title="User" />
 
             <div className="space-y-4 p-5">
-                {/* HEADER */}
                 <div className="flex items-center justify-between">
                     <h1 className="text-xl font-semibold">Data User</h1>
 
@@ -157,9 +154,7 @@ export default function Index({ users, filters, stores }: Props) {
                     </div>
                 </div>
 
-                {/* FILTER */}
                 <div className="grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {/* SEARCH */}
                     <div className="space-y-1">
                         <Label className="text-[11px]">Nama / Username</Label>
 
@@ -178,7 +173,6 @@ export default function Index({ users, filters, stores }: Props) {
                         />
                     </div>
 
-                    {/* STORE */}
                     <div className="space-y-1">
                         <Label className="text-[11px]">Store</Label>
 
@@ -207,7 +201,6 @@ export default function Index({ users, filters, stores }: Props) {
                     </div>
                 </div>
 
-                {/* DIALOG FORM */}
                 <Dialog open={open} onOpenChange={setOpen}>
                     <DialogContent className="sm:max-w-lg">
                         <DialogHeader>
@@ -245,9 +238,8 @@ export default function Index({ users, filters, stores }: Props) {
                     </DialogContent>
                 </Dialog>
 
-                {/* TABLE */}
                 <DataTable<User>
-                    columns={columnUsers(openEdit)}
+                    columns={columnUsers(openEdit, route)}
                     data={users.data}
                     meta={users.meta}
                     columnVisibility={columnVisibility}

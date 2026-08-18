@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { router, useForm } from '@inertiajs/react';
@@ -70,9 +69,7 @@ function TargetDialog({ store }: { store: Store }) {
         });
     };
 
-    const handleAmountChange = (
-        e: React.ChangeEvent<HTMLInputElement>,
-    ) => {
+    const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value.replace(/\D/g, '');
         const amount = raw ? Number(raw) : 0;
 
@@ -98,9 +95,7 @@ function TargetDialog({ store }: { store: Store }) {
 
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>
-                        Target - {store.name}
-                    </DialogTitle>
+                    <DialogTitle>Target - {store.name}</DialogTitle>
 
                     <DialogDescription>
                         Atur target penjualan untuk store ini.
@@ -114,10 +109,7 @@ function TargetDialog({ store }: { store: Store }) {
                             type="number"
                             value={data.year}
                             onChange={(e) =>
-                                setData(
-                                    'year',
-                                    Number(e.target.value),
-                                )
+                                setData('year', Number(e.target.value))
                             }
                         />
 
@@ -133,17 +125,14 @@ function TargetDialog({ store }: { store: Store }) {
                         <Select
                             value={data.month.toString()}
                             onValueChange={(value) =>
-                                setData(
-                                    'month',
-                                    Number(value),
-                                )
+                                setData('month', Number(value))
                             }
                         >
                             <SelectTrigger>
                                 <SelectValue placeholder="Pilih bulan" />
                             </SelectTrigger>
 
-                            <SelectContent>
+                            <SelectContent align="start">
                                 {monthNames.map((name, index) => (
                                     <SelectItem
                                         key={index + 1}
@@ -167,9 +156,7 @@ function TargetDialog({ store }: { store: Store }) {
                         <Input
                             type="text"
                             inputMode="numeric"
-                            value={formatRupiah(
-                                String(data.target_amount),
-                            )}
+                            value={formatRupiah(String(data.target_amount))}
                             onFocus={(e) => e.target.select()}
                             onChange={handleAmountChange}
                         />
@@ -196,10 +183,8 @@ function TargetDialog({ store }: { store: Store }) {
                                 <SelectValue />
                             </SelectTrigger>
 
-                            <SelectContent>
-                                <SelectItem value="active">
-                                    Active
-                                </SelectItem>
+                            <SelectContent align="start">
+                                <SelectItem value="active">Active</SelectItem>
 
                                 <SelectItem value="inactive">
                                     Inactive
@@ -216,20 +201,12 @@ function TargetDialog({ store }: { store: Store }) {
                 </div>
 
                 <DialogFooter>
-                    <Button
-                        variant="outline"
-                        onClick={() => setOpen(false)}
-                    >
+                    <Button variant="outline" onClick={() => setOpen(false)}>
                         Batal
                     </Button>
 
-                    <Button
-                        onClick={submit}
-                        disabled={processing}
-                    >
-                        {processing
-                            ? 'Menyimpan...'
-                            : 'Simpan'}
+                    <Button onClick={submit} disabled={processing}>
+                        {processing ? 'Menyimpan...' : 'Simpan'}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -251,16 +228,18 @@ export const columnStores: ColumnDef<Store>[] = [
     {
         accessorKey: 'address',
         header: 'Alamat',
-        cell: ({ row }) =>
-            row.original.address ?? '-',
+        cell: ({ row }) => (
+            <div className="max-w-56 truncate">
+                {row.getValue('address') ?? '-'}
+            </div>
+        ),
     },
 
     {
         accessorKey: 'target_amount',
         header: 'Target',
         cell: ({ row }) => {
-            const amount =
-                row.original.target?.target_amount;
+            const amount = row.original.target?.target_amount;
 
             if (!amount) return '-';
 
@@ -284,23 +263,17 @@ export const columnStores: ColumnDef<Store>[] = [
         id: 'status',
         header: 'Status',
         cell: ({ row }) => {
-            const status =
-                row.original.target?.status;
+            const status = row.original.target?.status;
 
             if (!status) return '-';
 
-            return status === 'active'
-                ? 'Active'
-                : 'Inactive';
+            return status === 'active' ? 'Active' : 'Inactive';
         },
     },
 
     {
         id: 'actions',
         header: 'Action',
-        cell: ({ row }) => (
-            <TargetDialog store={row.original} />
-        ),
+        cell: ({ row }) => <TargetDialog store={row.original} />,
     },
 ];
-
