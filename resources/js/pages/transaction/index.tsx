@@ -17,6 +17,8 @@ import { columnTransactions } from './column-transaction';
 import { Transaction } from '@/types/custom/transaction';
 import { PaginationMeta } from '@/types/custom/pagination';
 import ProcessTransactionDialog from './process-transaction-dialog';
+import { TransactionDetail } from '@/types/custom/transaction-detail';
+import MutationBackorderDialog from './mutation-backorder-dialog';
 
 interface Props {
     transactions: {
@@ -32,6 +34,11 @@ interface Props {
 
 export default function Index({ transactions, filters }: Props) {
     const route = useRoute();
+    const [selectedMutationTransaction, setSelectedMutationTransaction] =
+        useState<TransactionDetail | null>(null);
+    const [openMutation, setOpenMutation] = useState(false);
+    const [loadingMutation, setLoadingMutation] = useState(false);
+
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(
         {},
     );
@@ -62,6 +69,35 @@ export default function Index({ transactions, filters }: Props) {
         exportRoute: 'transaction.export',
         allColumns,
     });
+
+    const handleMutation = async (transaction: Transaction) => {
+        try {
+            setLoadingMutation(true);
+
+            const response = await fetch(
+                route('transaction.mutation-detail', transaction.id),
+                {
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                },
+            );
+
+            if (!response.ok) {
+                throw new Error('Gagal mengambil detail transaksi.');
+            }
+
+            const result = await response.json();
+
+            setSelectedMutationTransaction(result.data as TransactionDetail);
+
+            setOpenMutation(true);
+        } catch (error) {
+            console.error('Gagal mengambil detail transaksi:', error);
+        } finally {
+            setLoadingMutation(false);
+        }
+    };
 
     const handleResetFilters = () => {
         setIsRefreshing(true);
@@ -141,7 +177,7 @@ export default function Index({ transactions, filters }: Props) {
                     columns={columnTransactions((transaction) => {
                         setSelectedTransaction(transaction);
                         setOpenProcess(true);
-                    })}
+                    }, handleMutation, loadingMutation)}
                     data={transactions.data}
                     meta={transactions.meta}
                     columnVisibility={columnVisibility}
@@ -163,6 +199,19 @@ export default function Index({ transactions, filters }: Props) {
                     onOpenChange={setOpenProcess}
                     transaction={selectedTransaction}
                 />
+                {selectedMutationTransaction && (
+                    <MutationBackorderDialog
+                        open={openMutation}
+                        onOpenChange={(open) => {
+                            setOpenMutation(open);
+
+                            if (!open) {
+                                setSelectedMutationTransaction(null);
+                            }
+                        }}
+                        transaction={selectedMutationTransaction}
+                    />
+                )}
             </div>
         </AppLayout>
     );

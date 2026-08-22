@@ -1,12 +1,32 @@
 export interface TransactionItem {
     id: number;
+    product_id: number;
     product_name: string;
     quantity: number;
     base_price: number;
     price: number;
     discount: number;
     subtotal: number;
+    fulfillment_status: 'ready' | 'waiting_stock' | 'fulfilled';
+    stores: TransactionItemStore[];
 }
+
+export interface TransactionItemStore {
+    id: number;
+    store_code: string;
+    name: string;
+    stock: number;
+}
+
+// export interface TransactionItem {
+//     id: number;
+//     product_name: string;
+//     quantity: number;
+//     base_price: number;
+//     price: number;
+//     discount: number;
+//     subtotal: number;
+// }
 
 export interface Payment {
     id: number;
@@ -22,6 +42,11 @@ export interface TransactionDetail {
     subtotal: number;
     shipping_cost: number;
     total: number;
+
+    store_id: number;
+
+
+
     payment_status: string;
     delivery_type: string;
     driver_name?: string;

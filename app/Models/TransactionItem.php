@@ -10,6 +10,8 @@ class TransactionItem extends Model
         'transaction_id',
         'product_id',
         'quantity',
+        'stock_at_transaction',
+        'fulfillment_status',
         'base_price',
         'price',
         'discount',
@@ -24,5 +26,10 @@ class TransactionItem extends Model
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function mutationHistories()
+    {
+        return $this->hasMany(StockMutationHistory::class);
     }
 }

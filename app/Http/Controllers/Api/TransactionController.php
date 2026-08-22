@@ -7,40 +7,87 @@ use App\Http\Resources\Api\TreansactionDetailResource;
 use App\Http\Resources\Api\TreansactionResource;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class TransactionController extends Controller
 {
+    // public function index(Request $request)
+    // {
+    //     $user = $request->user();
+
+    //     $month = $request->integer('month');
+    //     $year  = $request->integer('year');
+
+    //     $transactions = Transaction::query()
+    //         ->with([
+    //             'customer:id,name',
+    //             // 'store:id,name',
+    //         ])
+    //         ->withSum('payments', 'amount')
+    //         ->when(
+    //             $user->store_id,
+    //             fn($q) => $q->where('store_id', $user->store_id)
+    //         )
+    //         ->when(
+    //             $year,
+    //             fn($q) => $q->whereYear('created_at', $year)
+    //         )
+    //         ->when(
+    //             $month,
+    //             fn($q) => $q->whereMonth('created_at', $month)
+    //         )
+    //         ->latest()
+    //         ->limit(
+    //             $request->integer('limit', 50)
+    //         )
+    //         ->get();
+
+    //     return TreansactionResource::collection($transactions);
+    // }
     public function index(Request $request)
     {
         $user = $request->user();
 
-        $month = $request->integer('month');
-        $year  = $request->integer('year');
+        $startDate = $request->input('start_date');
+        $endDate   = $request->input('end_date');
 
         $transactions = Transaction::query()
             ->with([
                 'customer:id,name',
-                // 'store:id,name',
             ])
             ->withSum('payments', 'amount')
+
             ->when(
                 $user->store_id,
                 fn($q) => $q->where('store_id', $user->store_id)
             )
+
             ->when(
-                $year,
-                fn($q) => $q->whereYear('created_at', $year)
+                $startDate,
+                fn($q) => $q->where(
+                    'created_at',
+                    '>=',
+                    Carbon::parse($startDate)->startOfDay()
+                )
             )
+
             ->when(
-                $month,
-                fn($q) => $q->whereMonth('created_at', $month)
+                $endDate,
+                fn($q) => $q->where(
+                    'created_at',
+                    '<=',
+                    Carbon::parse($endDate)->endOfDay()
+                )
             )
+
             ->latest()
+
             ->limit(
                 $request->integer('limit', 50)
             )
+
             ->get();
 
         return TreansactionResource::collection($transactions);
@@ -248,7 +295,7 @@ class TransactionController extends Controller
             ],
         ]);
     }
-    
+
     public function updateNotes(
         Request $request,
         Transaction $transaction

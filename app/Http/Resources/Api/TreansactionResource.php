@@ -17,6 +17,7 @@ class TreansactionResource extends JsonResource
         return [
             'id' => $this->id,
             'invoice_number' => $this->invoice_number,
+            'transaction_type' => $this->transaction_type,
             'payment_status' => $this->payment_status,
             'created_at' => $this->created_at->format('d-m-Y H:i'),
 

@@ -34,13 +34,6 @@ class ProductController extends Controller
         ]);
     }
 
-    // public function show(Product $product)
-    // {
-    //     $product->load(['category', 'stores']);
-    //     return Inertia::render('product/show', [
-    //         'product' => (new ProductDetailResource($product))->resolve(),
-    //     ]);
-    // }
     public function show(Product $product)
     {
         $product->load(['category', 'stores']);
@@ -54,7 +47,6 @@ class ProductController extends Controller
             'stores' => $stores,
         ]);
     }
-
     public function update(Request $request, Product $product)
     {
         $request->validate([

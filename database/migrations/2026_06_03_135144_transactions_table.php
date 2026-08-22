@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
 
             $table->string('invoice_number')->unique();
+            // $table->string('transaction_type')->default('normal')->index();
 
             // kasir (WAJIB)
             $table->foreignId('user_id')

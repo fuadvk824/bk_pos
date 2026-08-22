@@ -10,17 +10,6 @@ use App\Http\Controllers\Api\UserController;
 use App\Models\AppVersion;
 use Illuminate\Support\Facades\Route;
 
-// Route::get('/app-version', function () {
-//     $version = AppVersion::latest()->first();
-
-//     return response()->json([
-//         'version'      => $version->version,
-//         'apk_url'      => $version->apk_url,
-//         'force_update' => $version->force_update,
-//         'message'      => $version->message,
-//     ]);
-// });
-
 Route::get('/app-version', function () {
     $version = AppVersion::where('force_update', true)->first();
 
@@ -48,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/products', [ProductController::class, 'index']);
     Route::post('/products/scan', [ProductController::class, 'scan']);
+    Route::get('/products/backorder-search', [ProductController::class, 'backorderSearch']);
 
     Route::get('/transactions', [TransactionController::class, 'index']);
     Route::get('/transactions/{transaction}', [TransactionController::class, 'show']);

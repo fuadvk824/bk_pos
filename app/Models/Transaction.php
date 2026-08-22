@@ -8,6 +8,7 @@ class Transaction extends Model
 {
     protected $fillable = [
         'invoice_number',
+        'transaction_type',
         'user_id',
         'store_id',
         'customer_id',
@@ -46,5 +47,9 @@ class Transaction extends Model
     {
         return $this->belongsTo(Customer::class);
     }
-    
+
+    public function mutationHistories()
+    {
+        return $this->hasMany(StockMutationHistory::class);
+    }
 }

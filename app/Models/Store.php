@@ -10,6 +10,7 @@ class Store extends Model
         'store_code',
         'company_id',
         'name',
+        'name_view',
         'address',
         'email',
         'phone'

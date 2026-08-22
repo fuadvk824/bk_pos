@@ -50,6 +50,7 @@ class UserController extends Controller
 
                 'store_id' => $store->id,
                 'store_name' => $store->name,
+                'store_view' => $store->name_view,
                 'store_code' => $store->store_code,
 
                 'target_amount' => (float) ($target?->target_amount ?? 0),

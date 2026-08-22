@@ -37,12 +37,24 @@ Route::middleware(['auth', 'verified', 'role:super-admin|admin'])->group(functio
 
             Route::get('/', [TransactionController::class, 'index'])
                 ->name('index');
+            Route::get(
+                '/{transaction}/mutation-detail',
+                [TransactionController::class, 'mutationDetail']
+            )->name('mutation-detail');
             Route::get('/{transaction}', [TransactionController::class, 'show'])
                 ->name('show');
             Route::post(
                 '/{transaction}/process',
                 [TransactionController::class, 'process']
             )->name('process');
+            Route::post(
+                '/{transaction}/backorder/mutation',
+                [TransactionController::class, 'mutateBackorder']
+            )->name('backorder.mutation');
+            Route::get(
+                '/{transaction}/mutation-history',
+                [TransactionController::class, 'mutationHistory']
+            )->name('mutation-history');
         });
 
     Route::prefix('cashier')

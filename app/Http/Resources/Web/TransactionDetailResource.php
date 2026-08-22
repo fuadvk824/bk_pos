@@ -9,9 +9,7 @@ class TransactionDetailResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-       
-
-         return [
+        return [
             'id' => $this->id,
 
             'invoice_number' => $this->invoice_number,
@@ -39,12 +37,38 @@ class TransactionDetailResource extends JsonResource
                 return $this->items->map(function ($item) {
                     return [
                         'id' => $item->id,
+                        'product_id' => $item->product_id,
                         'product_name' => $item->product?->name,
                         'quantity' => $item->quantity,
                         'base_price' => $item->base_price,
                         'price' => $item->price,
                         'discount' => $item->discount,
                         'subtotal' => $item->subtotal,
+
+                        // ==================================
+                        // BACKORDER
+                        // ==================================
+                        'fulfillment_status' => $item->fulfillment_status,
+                        'stores' => $item->product?->stores
+                            ?->map(function ($store) {
+                                return [
+                                    'id' =>
+                                    $store->id,
+
+                                    'store_code' =>
+                                    $store->store_code,
+
+                                    'name' =>
+                                    $store->name,
+
+                                    'stock' =>
+                                    $store->pivot?->stock
+                                        ?? $store->stock
+                                        ?? 0,
+                                ];
+                            })
+                            ->values()
+                            ->toArray() ?? [],
                     ];
                 });
             }),
