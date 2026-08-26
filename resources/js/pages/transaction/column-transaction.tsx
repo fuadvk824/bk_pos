@@ -58,7 +58,6 @@ export const columnTransactions = (
             return (
                 <div className="flex gap-2">
 
-                    {/* DETAIL */}
 
                     <Button
                         size="sm"
@@ -77,7 +76,6 @@ export const columnTransactions = (
                         Detail
                     </Button>
 
-                    {/* PROSES / LUNAS */}
 
                     <Button
                         size="sm"
@@ -101,7 +99,6 @@ export const columnTransactions = (
                             : 'Proses'}
                     </Button>
 
-                    {/* MUTASI BACKORDER */}
 
                     {transaction.is_backorder && (
                         <Button

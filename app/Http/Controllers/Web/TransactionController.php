@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\ProcessTransactionRequest;
+use App\Http\Resources\Web\MutasiTransactionResource;
 use App\Http\Resources\Web\TransactionDetailResource;
 use App\Http\Resources\Web\TransactionResource;
 use App\Models\Payment;
@@ -28,9 +29,6 @@ class TransactionController extends Controller
                 'store',
             ])
             ->withSum('payments', 'amount')
-            // ==========================================
-            // COUNT FULFILLMENT STATUS
-            // ==========================================
             ->withCount([
                 'items as waiting_stock_count' => function ($query) {
                     $query->where(
@@ -93,7 +91,6 @@ class TransactionController extends Controller
             'store',
             'user',
             'payments.user',
-
             'items.product.stores',
         ]);
 
@@ -103,45 +100,25 @@ class TransactionController extends Controller
             )->resolve(),
         ]);
     }
+
     public function mutationDetail(Transaction $transaction)
     {
         $transaction->load([
-            'customer',
             'store',
-            'user',
-            'payments.user',
             'items.product.stores',
         ]);
 
         return response()->json([
             'data' => (
-                new TransactionDetailResource($transaction)
+                new MutasiTransactionResource($transaction)
             )->resolve(),
         ]);
     }
-
-    // public function show(Transaction $transaction)
-    // {
-    //     $transaction->load([
-    //         'customer',
-    //         'store',
-    //         'user',
-    //         'payments.user',
-    //         'items.product',
-    //     ]);
-
-    //     return Inertia::render('transaction/show', [
-    //         'transaction' => (
-    //             new TransactionDetailResource($transaction)
-    //         )->resolve(),
-    //     ]);
-    // }
 
     public function process(
         ProcessTransactionRequest $request,
         Transaction $transaction
     ) {
-
         DB::transaction(function () use (
             $request,
             $transaction
@@ -157,7 +134,6 @@ class TransactionController extends Controller
                 $transaction->payments()->sum('amount');
 
             if ($request->amount > $remaining) {
-
                 throw ValidationException::withMessages([
                     'amount' => [
                         'Nominal pembayaran melebihi sisa tagihan.',
@@ -179,12 +155,10 @@ class TransactionController extends Controller
             $transaction->refresh();
 
             if ($totalPaid <= 0) {
-
                 $status = 'unpaid';
             } elseif ($totalPaid < $transaction->total) {
                 $status = 'partial';
             } else {
-
                 $status = 'paid';
             }
 
@@ -199,50 +173,10 @@ class TransactionController extends Controller
         );
     }
 
-    /**
-     * ==========================================================
-     * MUTATE BACKORDER
-     *
-     * Mendukung:
-     * - Banyak transaction item
-     * - Source store berbeda per item
-     * - Quantity berbeda per item
-     * - Satu transaksi database
-     * - Stock locking
-     * - History mutasi
-     * ==========================================================
-     *
-     * Request:
-     *
-     * {
-     *     "items": [
-     *         {
-     *             "transaction_item_id": 10,
-     *             "source_store_id": 2,
-     *             "quantity": 3
-     *         },
-     *         {
-     *             "transaction_item_id": 11,
-     *             "source_store_id": 4,
-     *             "quantity": 1
-     *         }
-     *     ]
-     * }
-     */
-
-
     public function mutateBackorder(
         Request $request,
         Transaction $transaction
     ) {
-        // ==========================================================
-        // VALIDASI REQUEST
-        //
-        // Frontend tetap mengirim items.
-        // Quantity dari frontend hanya sebagai informasi.
-        // Quantity final dihitung ulang oleh backend.
-        // ==========================================================
-
         $validated = $request->validate([
             'items' => [
                 'required',
@@ -264,7 +198,7 @@ class TransactionController extends Controller
             ],
 
             'items.*.quantity' => [
-                'nullable',
+                'required',
                 'integer',
                 'min:1',
             ],
@@ -274,19 +208,10 @@ class TransactionController extends Controller
             $validated,
             $transaction
         ) {
-
-            // ======================================================
-            // LOCK TRANSACTION
-            // ======================================================
-
             $transaction = Transaction::query()
                 ->whereKey($transaction->id)
                 ->lockForUpdate()
                 ->firstOrFail();
-
-            // ======================================================
-            // AMBIL SEMUA ITEM TRANSAKSI + LOCK
-            // ======================================================
 
             $transactionItems = TransactionItem::query()
                 ->where(
@@ -297,19 +222,11 @@ class TransactionController extends Controller
                 ->get()
                 ->keyBy('id');
 
-            // ======================================================
-            // AMBIL ITEM WAITING STOCK
-            // ======================================================
-
             $waitingStockItems = $transactionItems
                 ->filter(function ($item) {
                     return $item->fulfillment_status ===
                         'waiting_stock';
                 });
-
-            // ======================================================
-            // HARUS ADA WAITING STOCK
-            // ======================================================
 
             if ($waitingStockItems->isEmpty()) {
                 throw ValidationException::withMessages([
@@ -319,19 +236,13 @@ class TransactionController extends Controller
                 ]);
             }
 
-            // ======================================================
-            // ITEM YANG DIKIRIM FRONTEND
-            // ======================================================
-
             $submittedItemIds = collect(
                 $validated['items']
             )
                 ->pluck('transaction_item_id')
-                ->map(fn($id) => (int) $id);
-
-            // ======================================================
-            // PASTIKAN SEMUA WAITING STOCK DIKIRIM
-            // ======================================================
+                ->map(
+                    fn($id) => (int) $id
+                );
 
             $missingItems = $waitingStockItems
                 ->keys()
@@ -345,20 +256,15 @@ class TransactionController extends Controller
                 ]);
             }
 
-            // ======================================================
-            // CEK ITEM YANG DIKIRIM
-            // ======================================================
-
+            // validation frontend
             foreach ($validated['items'] as $mutation) {
 
-                $transactionItemId =
-                    (int) $mutation['transaction_item_id'];
+                $transactionItemId = (int) $mutation['transaction_item_id'];
+                $sourceStoreId = (int) $mutation['source_store_id'];
 
-                // --------------------------------------------------
-                // Item harus milik transaction ini
-                // --------------------------------------------------
-
-                if (!$transactionItems->has($transactionItemId)) {
+                if (!$transactionItems->has(
+                    $transactionItemId
+                )) {
                     throw ValidationException::withMessages([
                         'items' => [
                             "Item transaksi {$transactionItemId} tidak ditemukan pada transaksi ini."
@@ -366,14 +272,7 @@ class TransactionController extends Controller
                     ]);
                 }
 
-                $transactionItem =
-                    $transactionItems->get(
-                        $transactionItemId
-                    );
-
-                // --------------------------------------------------
-                // Hanya waiting_stock yang boleh dimutasi
-                // --------------------------------------------------
+                $transactionItem = $transactionItems->get($transactionItemId);
 
                 if (
                     $transactionItem->fulfillment_status
@@ -386,13 +285,9 @@ class TransactionController extends Controller
                     ]);
                 }
 
-                // --------------------------------------------------
-                // Source tidak boleh destination
-                // --------------------------------------------------
-
                 if (
-                    (int) $mutation['source_store_id']
-                    === (int) $transaction->store_id
+                    $sourceStoreId ===
+                    (int) $transaction->store_id
                 ) {
                     throw ValidationException::withMessages([
                         'items' => [
@@ -400,14 +295,19 @@ class TransactionController extends Controller
                         ],
                     ]);
                 }
+
+                if (
+                    (int) $mutation['quantity'] <= 0
+                ) {
+                    throw ValidationException::withMessages([
+                        'items' => [
+                            "Quantity mutasi produk {$transactionItem->product_id} harus lebih dari 0."
+                        ],
+                    ]);
+                }
             }
 
-            // ======================================================
-            // CEK DUPLIKAT MUTASI
-            //
-            // Satu transaction item hanya boleh diselesaikan sekali.
-            // ======================================================
-
+            // validation mutation
             foreach ($validated['items'] as $mutation) {
 
                 $alreadyMutated =
@@ -431,40 +331,15 @@ class TransactionController extends Controller
                 }
             }
 
-            // ======================================================
-            // PREPARE MUTATIONS
-            //
-            // Kita hitung dulu:
-            //
-            // transaction quantity
-            // destination stock
-            // destination used
-            // shortage dari source
-            //
-            // Belum mengubah stock.
-            // ======================================================
-
             $mutationRecords = [];
 
             foreach ($validated['items'] as $mutation) {
-
-                $transactionItem =
-                    $transactionItems->get(
-                        (int) $mutation['transaction_item_id']
-                    );
-
-                $productId =
-                    $transactionItem->product_id;
-
-                $sourceStoreId =
-                    (int) $mutation['source_store_id'];
-
-                $destinationStoreId =
-                    (int) $transaction->store_id;
-
-                // ==================================================
-                // LOCK SOURCE STOCK
-                // ==================================================
+                $transactionItemId = (int) $mutation['transaction_item_id'];
+                $sourceStoreId = (int) $mutation['source_store_id'];
+                $mutationQuantity = (int) $mutation['quantity'];
+                $transactionItem = $transactionItems->get($transactionItemId);
+                $productId = (int) $transactionItem->product_id;
+                $destinationStoreId = (int) $transaction->store_id;
 
                 $sourceStock = DB::table('product_store')
                     ->where(
@@ -481,14 +356,26 @@ class TransactionController extends Controller
                 if (!$sourceStock) {
                     throw ValidationException::withMessages([
                         'items' => [
-                            "Produk {$productId} tidak tersedia di source store."
+                            "Produk {$productId} belum terdaftar pada source store."
                         ],
                     ]);
                 }
 
-                // ==================================================
-                // LOCK DESTINATION STOCK
-                // ==================================================
+                $sourceAvailable =
+                    (int) $sourceStock->stock;
+
+                if (
+                    $mutationQuantity >
+                    $sourceAvailable
+                ) {
+                    throw ValidationException::withMessages([
+                        'items' => [
+                            "Stock produk {$productId} di source store tidak mencukupi. "
+                                . "Tersedia: {$sourceAvailable}, "
+                                . "diminta: {$mutationQuantity}."
+                        ],
+                    ]);
+                }
 
                 $destinationStock = DB::table('product_store')
                     ->where(
@@ -502,157 +389,21 @@ class TransactionController extends Controller
                     ->lockForUpdate()
                     ->first();
 
-                // ==================================================
-                // QUANTITY TRANSAKSI
-                //
-                // JANGAN menggunakan quantity dari frontend.
-                // ==================================================
+                if (!$destinationStock) {
 
-                $transactionQuantity =
-                    (int) $transactionItem->quantity;
-
-                // ==================================================
-                // STOCK DESTINATION SAAT INI
-                // ==================================================
-
-                $destinationAvailable =
-                    (int) (
-                        $destinationStock?->stock ?? 0
-                    );
-
-                // ==================================================
-                // BERAPA STOCK DESTINATION YANG BISA DIPAKAI?
-                // ==================================================
-
-                $destinationUsed = min(
-                    $destinationAvailable,
-                    $transactionQuantity
-                );
-
-                // ==================================================
-                // KEKURANGAN YANG HARUS DIAMBIL SOURCE
-                // ==================================================
-
-                $shortageQuantity =
-                    $transactionQuantity -
-                    $destinationUsed;
-
-                // ==================================================
-                // VALIDASI SOURCE STOCK
-                // ==================================================
-
-                if (
-                    $sourceStock->stock <
-                    $shortageQuantity
-                ) {
-                    throw ValidationException::withMessages([
-                        'items' => [
-                            "Stock produk {$productId} di source store tidak mencukupi. "
-                                . "Tersedia: {$sourceStock->stock}, "
-                                . "dibutuhkan: {$shortageQuantity}."
-                        ],
+                    DB::table('product_store')->insert([
+                        'product_id' => $productId,
+                        'store_id' => $destinationStoreId,
+                        'stock' => 0,
+                        'price_all' => $sourceStock->price_all,
+                        'price' => $sourceStock->price,
+                        'discount' => $sourceStock->discount ?? 0,
+                        'created_at' => now(),
+                        'updated_at' => now(),
                     ]);
-                }
 
-                // ==================================================
-                // SIMPAN DATA UNTUK TAHAP MUTASI
-                //
-                // BELUM UPDATE STOCK.
-                // ==================================================
-
-                $mutationRecords[] = [
-                    'transaction_item' =>
-                    $transactionItem,
-
-                    'product_id' =>
-                    $productId,
-
-                    'source_store_id' =>
-                    $sourceStoreId,
-
-                    'destination_store_id' =>
-                    $destinationStoreId,
-
-                    'transaction_quantity' =>
-                    $transactionQuantity,
-
-                    'destination_available' =>
-                    $destinationAvailable,
-
-                    'destination_used' =>
-                    $destinationUsed,
-
-                    'shortage_quantity' =>
-                    $shortageQuantity,
-
-                    'source_stock' =>
-                    $sourceStock,
-
-                    'destination_stock' =>
-                    $destinationStock,
-                ];
-            }
-
-            // ======================================================
-            // SEMUA VALIDASI STOCK BERHASIL
-            //
-            // BARU SEKARANG UPDATE STOCK.
-            // ======================================================
-
-            foreach ($mutationRecords as $record) {
-
-                $transactionItem =
-                    $record['transaction_item'];
-
-                $productId =
-                    $record['product_id'];
-
-                $sourceStoreId =
-                    $record['source_store_id'];
-
-                $destinationStoreId =
-                    $record['destination_store_id'];
-
-                $destinationUsed =
-                    $record['destination_used'];
-
-                $shortageQuantity =
-                    $record['shortage_quantity'];
-
-                // ==================================================
-                // 1. KURANGI SOURCE
-                //
-                // HANYA SEBESAR KEKURANGAN.
-                // ==================================================
-
-                if ($shortageQuantity > 0) {
-
-                    DB::table('product_store')
-                        ->where(
-                            'product_id',
-                            $productId
-                        )
-                        ->where(
-                            'store_id',
-                            $sourceStoreId
-                        )
-                        ->decrement(
-                            'stock',
-                            $shortageQuantity
-                        );
-                }
-
-                // ==================================================
-                // 2. KONSUMSI STOCK DESTINATION
-                //
-                // Destination stock tidak ditambah.
-                //
-                // Stock yang sudah ada digunakan untuk transaksi.
-                // ==================================================
-
-                if ($destinationUsed > 0) {
-
-                    DB::table('product_store')
+                    $destinationStock =
+                        DB::table('product_store')
                         ->where(
                             'product_id',
                             $productId
@@ -661,48 +412,63 @@ class TransactionController extends Controller
                             'store_id',
                             $destinationStoreId
                         )
-                        ->decrement(
-                            'stock',
-                            $destinationUsed
-                        );
+                        ->lockForUpdate()
+                        ->first();
                 }
 
-                // ==================================================
-                // 3. SIMPAN HISTORY
-                //
-                // quantity = stock yang benar-benar diambil
-                // dari source store.
-                // ==================================================
+                $destinationStockBefore = (int) $destinationStock->stock;
+                $transactionQuantity = (int) $transactionItem->quantity;
+                $destinationStockAfter = $destinationStockBefore + $mutationQuantity;
+
+                $destinationUsed = min($destinationStockAfter, $transactionQuantity);
+                $destinationStockFinal = $destinationStockAfter - $destinationUsed;
+
+                $mutationRecords[] = [
+                    'transaction_item' => $transactionItem,
+                    'product_id' => $productId,
+                    'source_store_id' => $sourceStoreId,
+                    'destination_store_id' => $destinationStoreId,
+                    'mutation_quantity' => $mutationQuantity,
+                    'transaction_quantity' => $transactionQuantity,
+                    'destination_stock_before' => $destinationStockBefore,
+                    'destination_used' => $destinationUsed,
+                    'destination_stock_final' => $destinationStockFinal,
+                ];
+            }
+
+            foreach ($mutationRecords as $record) {
+                $transactionItem = $record['transaction_item'];
+                $productId = $record['product_id'];
+                $sourceStoreId = $record['source_store_id'];
+                $destinationStoreId = $record['destination_store_id'];
+                $mutationQuantity = $record['mutation_quantity'];
+                $destinationStockBefore = $record['destination_stock_before'];
+                $destinationUsed = $record['destination_used'];
+                $destinationStockFinal = $record['destination_stock_final'];
+
+                DB::table('product_store')
+                    ->where('product_id', $productId)
+                    ->where('store_id', $sourceStoreId)
+                    ->decrement('stock', $mutationQuantity);
+
+                DB::table('product_store')
+                    ->where('product_id', $productId)
+                    ->where('store_id', $destinationStoreId)
+                    ->update([
+                        'stock' => $destinationStockFinal,
+                        'updated_at' => now(),
+                    ]);
 
                 StockMutationHistory::create([
-                    'transaction_id' =>
-                    $transaction->id,
-
-                    'transaction_item_id' =>
-                    $transactionItem->id,
-
-                    'product_id' =>
-                    $productId,
-
-                    'source_store_id' =>
-                    $sourceStoreId,
-
-                    'destination_store_id' =>
-                    $destinationStoreId,
-
-                    'quantity' =>
-                    $shortageQuantity,
-
-                    'status' =>
-                    'completed',
-
-                    'user_id' =>
-                    Auth::id(),
+                    'transaction_id' => $transaction->id,
+                    'transaction_item_id' => $transactionItem->id,
+                    'product_id' => $productId,
+                    'source_store_id' => $sourceStoreId,
+                    'destination_store_id' => $destinationStoreId,
+                    'quantity' => $mutationQuantity,
+                    'status' => 'completed',
+                    'user_id' => Auth::id(),
                 ]);
-
-                // ==================================================
-                // 4. WAITING STOCK -> FULFILLED
-                // ==================================================
 
                 $transactionItem->update([
                     'fulfillment_status' =>
@@ -710,41 +476,58 @@ class TransactionController extends Controller
                 ]);
             }
 
-            // ======================================================
-            // READY -> FULFILLED
-            //
-            // Item ready berarti stock destination sudah tersedia
-            // dan sekarang dianggap selesai.
-            // ======================================================
+            $readyItems = $transactionItems
+                ->filter(function ($item) {
+                    return $item->fulfillment_status === 'ready';
+                });
 
-            $transaction->items()
-                ->where(
-                    'fulfillment_status',
-                    'ready'
-                )
-                ->update([
+            foreach ($readyItems as $readyItem) {
+
+                $productId = (int) $readyItem->product_id;
+                $destinationStoreId = (int) $transaction->store_id;
+                $quantity = (int) $readyItem->quantity;
+                $destinationStock = DB::table('product_store')
+                    ->where('product_id', $productId)
+                    ->where('store_id', $destinationStoreId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$destinationStock) {
+                    throw ValidationException::withMessages([
+                        'items' => [
+                            "Produk {$productId} berstatus ready tetapi belum terdaftar pada destination store."
+                        ],
+                    ]);
+                }
+
+                $availableStock = (int) $destinationStock->stock;
+                if ($availableStock < $quantity) {
+                    throw ValidationException::withMessages([
+                        'items' => [
+                            "Stock produk {$productId} di destination store tidak mencukupi. "
+                                . "Tersedia: {$availableStock}, "
+                                . "dibutuhkan: {$quantity}."
+                        ],
+                    ]);
+                }
+
+                DB::table('product_store')
+                    ->where('product_id', $productId)
+                    ->where('store_id', $destinationStoreId)
+                    ->decrement('stock', $quantity);
+
+                $readyItem->update([
                     'fulfillment_status' =>
                     'fulfilled',
                 ]);
-
-            // ======================================================
-            // CEK APAKAH MASIH ADA WAITING STOCK
-            // ======================================================
+            }
 
             $remainingWaitingStock =
                 $transaction->items()
-                ->where(
-                    'fulfillment_status',
-                    'waiting_stock'
-                )
+                ->where('fulfillment_status', 'waiting_stock')
                 ->exists();
 
-            // ======================================================
-            // SEMUA ITEM SUDAH TERPENUHI
-            // ======================================================
-
             if (!$remainingWaitingStock) {
-
                 $transaction->update([
                     'transaction_type' =>
                     'normal',
@@ -752,21 +535,12 @@ class TransactionController extends Controller
             }
         });
 
-        // ==========================================================
-        // RESPONSE
-        // ==========================================================
-
         return back()->with(
             'success',
             'Mutasi stock berhasil diproses dan seluruh backorder telah dipenuhi.'
         );
     }
 
-    /**
-     * ==========================================================
-     * MUTATION HISTORY
-     * ==========================================================
-     */
     public function mutationHistory(
         Transaction $transaction
     ) {

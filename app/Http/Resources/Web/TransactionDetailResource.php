@@ -35,19 +35,20 @@ class TransactionDetailResource extends JsonResource
             ],
             'items' => $this->whenLoaded('items', function () {
                 return $this->items->map(function ($item) {
+                    
                     return [
                         'id' => $item->id,
                         'product_id' => $item->product_id,
                         'product_name' => $item->product?->name,
+
+                        'stock_at_transaction' => $item->stock_at_transaction,
+
                         'quantity' => $item->quantity,
                         'base_price' => $item->base_price,
                         'price' => $item->price,
                         'discount' => $item->discount,
                         'subtotal' => $item->subtotal,
 
-                        // ==================================
-                        // BACKORDER
-                        // ==================================
                         'fulfillment_status' => $item->fulfillment_status,
                         'stores' => $item->product?->stores
                             ?->map(function ($store) {
@@ -87,3 +88,4 @@ class TransactionDetailResource extends JsonResource
         ];
     }
 }
+ 
