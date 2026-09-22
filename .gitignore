@@ -29,3 +29,6 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+/public/apk/*
+!/public/apk/.gitkeep

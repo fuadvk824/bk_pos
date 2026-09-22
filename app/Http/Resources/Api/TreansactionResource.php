@@ -20,12 +20,11 @@ class TreansactionResource extends JsonResource
             'transaction_type' => $this->transaction_type,
             'payment_status' => $this->payment_status,
             'created_at' => $this->created_at->format('d-m-Y H:i'),
+            // 'created_at' => ($this->since ?? $this->created_at)?->format('d-m-Y H:i'),
 
             'delivery_type' => $this->delivery_type,
             'driver_name' => $this->driver_name,
             'customer_name' => $this->customer?->name,
-            // 'customer_address' => $this->customer?->address,
-            // 'store_name' => $this->store?->name,
 
             'total' => $this->total,
             'paid_amount' => $this->payments_sum_amount ?? 0,

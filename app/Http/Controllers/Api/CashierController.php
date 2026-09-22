@@ -5,8 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\CustomerPoint;
+use App\Models\Desa;
+use App\Models\Kabupaten;
+use App\Models\Kecamatan;
 use App\Models\Payment;
 use App\Models\PointSetting;
+use App\Models\Product;
+use App\Models\ProductStore;
+use App\Models\Provinsi;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use Illuminate\Http\Request;
@@ -16,293 +22,518 @@ use Illuminate\Support\Str;
 
 class CashierController extends Controller
 {
+    public function search(Request $request)
+    {
+        // $user = $request->user();
+        $search = $request->search;
+
+        return Customer::query()
+            // ->where('store_id', $user->store_id)
+            ->when($search, function ($q) use ($search) {
+                $q->where(function ($query) use ($search) {
+                    $query
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%");
+                });
+            })
+            ->latest()
+            ->limit(50)
+            ->get([
+                'id',
+                'name',
+                'phone',
+                'address',
+                'current_point',
+            ]);
+    }
+
     public function store(Request $request)
     {
+        $user = $request->user();
+
         $validated = $request->validate([
-            'transaction_type' => [
-                'required',
-                'in:normal,backorder'
-            ],
+            'transaction_type' => ['required', 'in:normal,backorder'],
+            'name' => ['required', 'string', 'max:255',],
+            'phone' => ['nullable', 'string', 'max:50',],
+            'address' => ['nullable', 'string',],
 
-            'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:20'],
-            'address' => ['nullable', 'string'],
+            'delivery_type' => ['required', 'in:pickup,delivery',],
+            'shipping_cost' => ['nullable', 'numeric', 'min:0',],
+            'notes' => ['nullable', 'string',],
 
-            'delivery_type' => ['required', 'in:pickup,delivery'],
-            'shipping_cost' => ['nullable', 'numeric', 'min:0'],
-            'points_used' => ['nullable', 'numeric', 'min:0'],
-            'notes' => ['nullable', 'string'],
-
-            'payment_status' => ['required', 'in:unpaid,partial,paid'],
+            'payment_status' => ['required', 'in:unpaid,partial,paid',],
             'payment_method' => ['nullable', 'in:cash,transfer,qris'],
-            'payment_amount' => ['nullable', 'numeric', 'min:0'],
+            'payment_amount' => ['nullable', 'numeric', 'min:0',],
 
-            'subtotal' => ['required', 'numeric', 'min:0'],
-            'total' => ['required', 'numeric', 'min:0'],
+            'points_used' => ['nullable', 'integer', 'min:0',],
+            'nego' => ['nullable', 'numeric', 'min:0',],
 
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.id' => ['required', 'exists:products,id'],
-            'items.*.qty' => ['required', 'integer', 'min:1'],
-            'items.*.price' => ['required', 'numeric', 'min:1'],
+            'items' => ['required', 'array', 'min:1',],
+            'items.*.id' => ['required', 'integer', 'exists:products,id',],
+            'items.*.qty' => ['required', 'integer', 'min:1',],
+            'items.*.price_lines' => ['required', 'array', 'min:1',],
+            'items.*.price_lines.*.qty' => ['required', 'integer', 'min:1',],
+
+            'items.*.price_lines.*.price' => ['required', 'numeric', 'min:0.01',],
+            'items.*.price_lines.*.label' => ['nullable', 'string', 'max:50',],
+            'items.*.price_lines.*.unit_size' => ['required', 'integer', 'min:1',],
+
+            'provinsi_id' => ['nullable', 'integer', 'exists:s_provinsi,id'],
+            'kabupaten_id' => ['nullable', 'integer', 'exists:s_kabupaten,id'],
+            'kecamatan_id' => ['nullable', 'integer', 'exists:s_kecamatan,id'],
+            'desa_id' => ['nullable', 'integer', 'exists:s_desa,id'],
         ]);
 
-        $storeId = Auth::user()->store_id;
+        $addressParts = [];
 
-        $isBackorder = $validated['transaction_type'] === 'backorder';
+        if (!empty($validated['address'])) {
+            $addressParts[] = trim($validated['address']);
+        }
+
+        if (!empty($validated['desa_id'])) {
+            $desa = Desa::find($validated['desa_id']);
+
+            if ($desa) {
+                $addressParts[] = $desa->nama;
+            }
+        }
+
+        if (!empty($validated['kecamatan_id'])) {
+            $kecamatan = Kecamatan::find($validated['kecamatan_id']);
+
+            if ($kecamatan) {
+                $addressParts[] = $kecamatan->nama;
+            }
+        }
+
+        if (!empty($validated['kabupaten_id'])) {
+            $kabupaten = Kabupaten::find($validated['kabupaten_id']);
+
+            if ($kabupaten) {
+                $addressParts[] = $kabupaten->nama;
+            }
+        }
+
+        if (!empty($validated['provinsi_id'])) {
+            $provinsi = Provinsi::find($validated['provinsi_id']);
+
+            if ($provinsi) {
+                $addressParts[] = $provinsi->nama;
+            }
+        }
+
+        $fullAddress = !empty($addressParts)
+            ? ucwords(strtolower(implode(', ', $addressParts)))
+            : null;
+
+        $requestedTransactionType = $validated['transaction_type'];
+        $transactionType = $requestedTransactionType;
+
+        $shippingCost = (float) ($validated['shipping_cost'] ?? 0);
+        $pointsUsed = (int) ($validated['points_used'] ?? 0);
+        $nego = (float) ($validated['nego'] ?? 0);
+
+        if ($validated['delivery_type'] === 'pickup') {
+            $shippingCost = 0;
+        }
+
+        if ($validated['payment_status'] === 'unpaid') {
+            $paymentMethod = null;
+            $paymentAmount = 0;
+        } else {
+            $paymentMethod = $validated['payment_method'] ?? null;
+            $paymentAmount = (float) ($validated['payment_amount'] ?? 0);
+
+            if (!$paymentMethod) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Metode pembayaran wajib dipilih',
+                ], 422);
+            }
+        }
+
+        DB::beginTransaction();
 
         try {
-            DB::beginTransaction();
+            $customer = null;
 
-            /*
-        |--------------------------------------------------------------------------
-        | Customer
-        |--------------------------------------------------------------------------
-        */
-            $customer = Customer::firstOrCreate(
-                ['phone' => $validated['phone']],
-                [
-                    'name' => $validated['name'],
-                    'address' => $validated['address'] ?? null,
-                ]
-            );
+            if (!empty($validated['phone']) || !empty($validated['name'])) {
 
-            /*
-        |--------------------------------------------------------------------------
-        | Validasi pembayaran
-        |--------------------------------------------------------------------------
-        */
-            if ($validated['payment_status'] === 'paid') {
+                $name = !empty($validated['name'])
+                    ? Str::title(trim($validated['name']))
+                    : null;
 
-                if (empty($validated['payment_amount'])) {
-                    throw new \Exception(
-                        "Nominal pembayaran wajib diisi"
-                    );
+                $phone = null;
+
+                if (!empty($validated['phone'])) {
+                    $phone = preg_replace('/[^\d+]/', '', trim($validated['phone']));
+
+                    if (Str::startsWith($phone, '+62')) {
+                        $phone = '0' . substr($phone, 3);
+                    } elseif (Str::startsWith($phone, '62')) {
+                        $phone = '0' . substr($phone, 2);
+                    } elseif (Str::startsWith($phone, '8')) {
+                        $phone = '0' . $phone;
+                    }
+
+                    if (!preg_match('/^08[1-9][0-9]{7,11}$/', $phone)) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'phone' => 'Nomor telepon tidak valid. Gunakan format 08xxxxxxxxxx atau +628xxxxxxxxxx.',
+                        ]);
+                    }
                 }
 
-                if ($validated['payment_amount'] < $validated['total']) {
+                $customer = null;
+
+                if ($phone) {
+                    $customer = Customer::where('phone', $phone)->first();
+                }
+
+                if (!$customer) {
+                    $customer = Customer::create([
+                        'name' => $name,
+                        'phone' => $phone,
+                        'address' => $fullAddress,
+                    ]);
+                }
+            }
+
+            if ($pointsUsed > 0) {
+                if (!$customer) {
                     throw new \Exception(
-                        "Pembayaran kurang dari total"
+                        'Customer wajib dipilih untuk menggunakan point'
+                    );
+                }
+                if ($pointsUsed > $customer->current_point) {
+                    throw new \Exception(
+                        'Point customer tidak mencukupi'
                     );
                 }
             }
 
-            if ($validated['payment_status'] === 'partial') {
-
-                if (empty($validated['payment_amount'])) {
-                    throw new \Exception(
-                        "Nominal DP wajib diisi"
-                    );
-                }
-
-                if (
-                    $validated['payment_amount'] <= 0 ||
-                    $validated['payment_amount'] >= $validated['total']
-                ) {
-                    throw new \Exception(
-                        "Nominal DP tidak valid"
-                    );
-                }
-            }
-
-            /*
-        |--------------------------------------------------------------------------
-        | Create transaction
-        |--------------------------------------------------------------------------
-        */
-            $transaction = Transaction::create([
-                'invoice_number' =>
-                'INV-' .
-                    now()->format('ymd') .
-                    '-' .
-                    strtoupper(Str::random(3)) .
-                    now()->format('Hi'),
-
-                'transaction_type' => $validated['transaction_type'],
-
-                'user_id' => Auth::id(),
-                'store_id' => $storeId,
-                'customer_id' => $customer->id,
-
-                'subtotal' => $validated['subtotal'],
-                'shipping_cost' => $validated['shipping_cost'] ?? 0,
-                'points_used' => $validated['points_used'] ?? 0,
-                'total' => $validated['total'],
-
-                'payment_status' => $validated['payment_status'],
-
-                'delivery_type' => $validated['delivery_type'],
-
-                'notes' => $validated['notes'] ?? null,
-            ]);
-
-            /*
-        |--------------------------------------------------------------------------
-        | Transaction Items
-        |--------------------------------------------------------------------------
-        */
+            $processedItems = [];
+            $calculatedSubtotal = 0;
 
             foreach ($validated['items'] as $item) {
+                $productId = (int) $item['id'];
+                $itemQty = (int) $item['qty'];
+                $priceLines = $item['price_lines'];
 
-                $productStore = DB::table('product_store')
-                    ->where('product_id', $item['id'])
-                    ->where('store_id', $storeId)
+                $product = Product::find($productId);
+                if (!$product) {
+                    throw new \Exception(
+                        "Produk ID {$productId} tidak ditemukan"
+                    );
+                }
+
+                $priceLinePcs = 0;
+                foreach ($priceLines as $line) {
+                    $lineQty = (int) $line['qty'];
+                    $unitSize = (int) $line['unit_size'];
+
+                    if ($lineQty <= 0) {
+                        throw new \Exception(
+                            "Qty harga produk ID {$productId} tidak valid"
+                        );
+                    }
+
+                    if ($unitSize <= 0) {
+                        throw new \Exception(
+                            "Ukuran unit produk ID {$productId} tidak valid"
+                        );
+                    }
+
+                    $priceLinePcs += $lineQty * $unitSize;
+                }
+
+                if ($priceLinePcs !== $itemQty) {
+                    throw new \Exception(
+                        "Rincian qty harga produk ID {$productId} tidak sesuai dengan qty produk"
+                    );
+                }
+
+                $productStore = ProductStore::where('product_id', $productId)
+                    ->where('store_id', $user->store_id)
                     ->lockForUpdate()
                     ->first();
 
-                logger(['product_id' => $item['id'],
-                    'store_id' => $storeId,
-                    'qty' => $item['qty'],
-                    'product_store_exists' => $productStore !== null,
-                    'stock' => $productStore?->stock,
-                    'is_backorder' => $isBackorder,]);
+                if ($requestedTransactionType === 'normal') {
 
-                /*
-            |--------------------------------------------------------------------------
-            | NORMAL
-            |--------------------------------------------------------------------------
-            */
-                if (!$isBackorder) {
-
-                    // Produk harus tersedia di store
                     if (!$productStore) {
                         throw new \Exception(
-                            "Produk {$item['id']} tidak tersedia di store."
+                            "Produk ID {$productId} tidak tersedia di toko"
                         );
                     }
 
-                    // Stok harus mencukupi
-                    if ($item['qty'] > $productStore->stock) {
+                    $stock = (int) $productStore->stock;
+
+                    if ($stock < $itemQty) {
                         throw new \Exception(
-                            "Stock produk {$item['id']} tidak cukup."
+                            "Stok produk ID {$productId} tidak mencukupi"
                         );
                     }
-                }
 
-                /*
-            |--------------------------------------------------------------------------
-            | Snapshot kondisi stock saat transaksi
-            |--------------------------------------------------------------------------
-            */
-                $currentStock = $productStore?->stock ?? 0;
-
-                $basePrice = $productStore?->price ?? 0;
-
-                $discount = $productStore?->discount ?? 0;
-
-                /*
-            |--------------------------------------------------------------------------
-            | Tentukan fulfillment status
-            |--------------------------------------------------------------------------
-            */
-                if (!$isBackorder) {
-
-                    // Normal selalu langsung terpenuhi
                     $fulfillmentStatus = 'fulfilled';
+
+                    $basePrice = (float) $productStore->price;
+                    $discount = (float) ($productStore->discount ?? 0);
                 } else {
 
-                    if (
-                        $productStore &&
-                        $productStore->stock >= $item['qty']
-                    ) {
-                        // Backorder tapi stok sebenarnya tersedia
+                    $stock = $productStore ? (int) $productStore->stock : 0;
+
+                    if ($stock >= $itemQty) {
                         $fulfillmentStatus = 'ready';
                     } else {
-                        // Tidak ada produk atau stok kurang
                         $fulfillmentStatus = 'waiting_stock';
                     }
+
+                    $basePrice = $productStore ? (float) $productStore->price : 0;
+                    $discount = $productStore ? (float) ($productStore->discount ?? 0) : 0;
                 }
 
-                /*
-            |--------------------------------------------------------------------------
-            | Simpan transaction item
-            |--------------------------------------------------------------------------
-            */
-                TransactionItem::create([
-                    'transaction_id' => $transaction->id,
-                    'product_id' => $item['id'],
-                    'quantity' => $item['qty'],
-                    'stock_at_transaction' => $currentStock,
-                    'fulfillment_status' => $fulfillmentStatus,
-                    'base_price' => $basePrice,
-                    'price' => $item['price'],
-                    'discount' => $discount,
-                    'subtotal' =>
-                    $item['qty'] * $item['price'],
-                ]);
+                $processedPriceLines = [];
+                foreach ($priceLines as $line) {
+                    $lineQty = (int) $line['qty'];
+                    $unitSize = (int) $line['unit_size'];
+                    $linePrice = (float) $line['price'];
+                    $lineLabel = trim((string) ($line['label'] ?? 'Eceran'));
 
-                /*
-            |--------------------------------------------------------------------------
-            | NORMAL → langsung kurangi stock
-            |
-            | BACKORDER → JANGAN kurangi stock
-            |--------------------------------------------------------------------------
-            */
-                if (!$isBackorder) {
-
-                    DB::table('product_store')
-                        ->where('product_id', $item['id'])
-                        ->where('store_id', $storeId)
-                        ->decrement(
-                            'stock',
-                            $item['qty']
+                    if ($lineQty <= 0) {
+                        throw new \Exception(
+                            "Qty harga produk ID {$productId} tidak valid"
                         );
+                    }
+
+                    if ($unitSize <= 0) {
+                        throw new \Exception(
+                            "Ukuran unit produk ID {$productId} tidak valid"
+                        );
+                    }
+
+                    if ($linePrice <= 0) {
+                        throw new \Exception(
+                            "Harga produk ID {$productId} tidak valid"
+                        );
+                    }
+
+                    $pcsQuantity = $lineQty * $unitSize;
+                    $normalizedLabel = strtolower($lineLabel);
+
+                    $isBundle = in_array(
+                        $normalizedLabel,
+                        ['dus', 'bundle', 'pack'],
+                        true
+                    );
+
+                    if ($isBundle) {
+                        $satuanUnit = $product->unit2 ?: 'BNDL';
+                    } else {
+                        $satuanUnit = $product->unit ?: 'PCS';
+                    }
+
+                    $quantity = $lineQty;
+                    $qtyUnit = $pcsQuantity;
+
+                    $lineSubtotal = $quantity * $linePrice;
+
+                    $calculatedSubtotal += $lineSubtotal;
+
+                    $processedPriceLines[] = [
+                        'quantity' => $quantity,
+                        'qty_unit' => $qtyUnit,
+                        'satuan_unit' => $satuanUnit,
+
+                        'unit_size' => $unitSize,
+                        'pcs_quantity' => $pcsQuantity,
+
+                        'price' => $linePrice,
+                        'label' => $lineLabel,
+                        'subtotal' => $lineSubtotal,
+                    ];
+                }
+
+                $processedItems[] = [
+                    'product_id' => $productId,
+                    'quantity' => $itemQty,
+                    'stock' => $stock,
+                    'base_price' => $basePrice,
+                    'discount' => $discount,
+                    'fulfillment_status' => $fulfillmentStatus,
+                    'price_lines' => $processedPriceLines,
+                    'product_store' => $productStore,
+                ];
+            }
+
+
+            if ($requestedTransactionType === 'backorder') {
+
+                $hasWaitingStock = collect($processedItems)
+                    ->contains(function ($item) {
+                        return $item['fulfillment_status'] === 'waiting_stock';
+                    });
+
+                $transactionType = $hasWaitingStock
+                    ? 'backorder'
+                    : 'normal';
+            } else {
+
+                $transactionType = 'normal';
+            }
+
+
+            $totalBeforeDiscount = $calculatedSubtotal + $shippingCost;
+
+            if ($nego < 0) {
+                throw new \Exception(
+                    'Nominal nego tidak boleh kurang dari 0'
+                );
+            }
+
+            $maximumNego = $totalBeforeDiscount - $pointsUsed;
+            if ($maximumNego < 0) {
+                $maximumNego = 0;
+            }
+
+            if ($nego > $maximumNego) {
+                throw new \Exception(
+                    'Nominal nego melebihi total transaksi'
+                );
+            }
+
+            $calculatedTotal = $calculatedSubtotal + $shippingCost - $pointsUsed - $nego;
+            if ($calculatedTotal < 0) {
+                throw new \Exception(
+                    'Total transaksi tidak boleh kurang dari 0'
+                );
+            }
+
+            if ($validated['payment_status'] === 'partial') {
+                if ($paymentAmount <= 0) {
+                    throw new \Exception(
+                        'Nominal pembayaran harus lebih dari 0'
+                    );
+                }
+
+                if ($paymentAmount > $calculatedTotal) {
+                    throw new \Exception(
+                        'Nominal pembayaran melebihi total transaksi'
+                    );
                 }
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Payment
-        |--------------------------------------------------------------------------
-        */
-            if (
-                in_array(
-                    $validated['payment_status'],
-                    ['paid', 'partial']
-                )
-                &&
-                !empty($validated['payment_amount'])
-            ) {
-
-                Payment::create([
-                    'transaction_id' => $transaction->id,
-                    'user_id' => Auth::id(),
-                    'amount' => $validated['payment_amount'],
-                    'payment_method' => $validated['payment_method'],
-                ]);
+            if ($validated['payment_status'] === 'paid') {
+                if ($calculatedTotal <= 0) {
+                    throw new \Exception(
+                        'Total transaksi tidak valid'
+                    );
+                }
+                $paymentAmount = $calculatedTotal;
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Customer Point - Redeem
-        |--------------------------------------------------------------------------
-        */
-            $customer = Customer::lockForUpdate()
-                ->find($customer->id);
+            if ($validated['payment_status'] === 'unpaid') {
+                $paymentAmount = 0;
+            }
 
-            if (
-                $transaction->points_used > 0 &&
-                $customer->current_point >= $transaction->points_used
-            ) {
+            $invoiceNumber = 'INV-' .
+                now()->format('ymd') .
+                '-' .
+                strtoupper(Str::random(3)) .
+                now()->format('Hi');
 
-                $customer->decrement(
-                    'current_point',
-                    $transaction->points_used
-                );
+            $transaction = Transaction::create([
+                'invoice_number' => $invoiceNumber,
+                'transaction_type' => $transactionType,
+                'user_id' => $user->id,
+                'store_id' => $user->store_id,
+                'customer_id' => $customer?->id,
+                'subtotal' => $calculatedSubtotal,
+                'shipping_cost' => $shippingCost,
+                'points_used' => $pointsUsed,
+                'nego' => $nego,
+                'total' => $calculatedTotal,
+                'payment_status' => $validated['payment_status'],
+                'delivery_type' => $validated['delivery_type'],
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            foreach ($processedItems as $processedItem) {
+
+                $productStore = $processedItem['product_store'];
+
+                foreach ($processedItem['price_lines'] as $priceLine) {
+
+                    TransactionItem::create([
+                        'transaction_id' => $transaction->id,
+                        'product_id' => $processedItem['product_id'],
+
+                        'quantity' => $priceLine['quantity'],
+                        'qty_unit' => $priceLine['qty_unit'],
+                        'satuan_unit' => $priceLine['satuan_unit'],
+
+                        'stock_at_transaction' => $processedItem['stock'],
+                        'fulfillment_status' => $processedItem['fulfillment_status'],
+                        'base_price' => $processedItem['base_price'],
+                        'price' => $priceLine['price'],
+                        'discount' => $processedItem['discount'],
+                        'subtotal' => $priceLine['subtotal'],
+                    ]);
+                }
+
+                if (
+                    $productStore &&
+                    in_array(
+                        $processedItem['fulfillment_status'],
+                        ['fulfilled', 'ready'],
+                        true
+                    )
+                ) {
+                    $productStore->decrement(
+                        'stock',
+                        $processedItem['quantity']
+                    );
+                }
+            }
+
+            if ($pointsUsed > 0) {
+                if (!$customer) {
+                    throw new \Exception(
+                        'Customer wajib dipilih untuk menggunakan point'
+                    );
+                }
+
+                $customer = Customer::lockForUpdate()->find($customer->id);
+                if (!$customer) {
+                    throw new \Exception(
+                        'Customer tidak ditemukan'
+                    );
+                }
+
+                if ($pointsUsed > $customer->current_point) {
+                    throw new \Exception(
+                        'Point customer tidak mencukupi'
+                    );
+                }
+
+                $customer->decrement('current_point', $pointsUsed);
 
                 CustomerPoint::create([
                     'customer_id' => $customer->id,
-                    'points' => $transaction->points_used,
+                    'points' => $pointsUsed,
                     'type' => 'redeem',
                     'reference' => $transaction->invoice_number,
                 ]);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | Customer Point - Earn
-        |--------------------------------------------------------------------------
-        */
-            if ($transaction->payment_status === 'paid') {
+            if (in_array($validated['payment_status'], ['paid', 'partial'], true)) {
+                Payment::create([
+                    'transaction_id' => $transaction->id,
+                    'user_id' => Auth::id(),
+                    'payment_method' => $paymentMethod,
+                    'amount' => $paymentAmount,
+                ]);
+            }
+
+            if ($transaction->payment_status === 'paid' && $transaction->customer_id) {
                 $this->giveCustomerPoint($transaction);
             }
 
@@ -311,378 +542,25 @@ class CashierController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Transaksi berhasil',
-                'invoice' => $transaction->invoice_number,
-                'transaction_id' => $transaction->id,
-            ]);
+                'data' => [
+                    'id' => $transaction->id,
+                    'invoice_number' => $transaction->invoice_number,
+                    'subtotal' => (float) $transaction->subtotal,
+                    'shipping_cost' => (float) $transaction->shipping_cost,
+                    'points_used' => (int) $transaction->points_used,
+                    'nego' => (float) $transaction->nego,
+                    'total' => (float) $transaction->total,
+                    'payment_status' => $transaction->payment_status,
+                ],
+
+            ], 201);
         } catch (\Throwable $e) {
-
             DB::rollBack();
-
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage(),
             ], 422);
         }
-    }
-
-    // public function store(Request $request)
-    // {
-    //     $validated = $request->validate([
-    //         'transaction_type' => [
-    //             'required',
-    //             'in:normal,backorder'
-    //         ],
-    //         'name' => ['required', 'string', 'max:255'],
-    //         'phone' => ['required', 'string', 'max:20'],
-    //         'address' => ['nullable', 'string'],
-
-    //         'delivery_type' => ['required', 'in:pickup,delivery'],
-    //         'shipping_cost' => ['nullable', 'numeric', 'min:0'],
-    //         'points_used' => ['nullable', 'numeric', 'min:0'],
-    //         'notes' => ['nullable', 'string'],
-
-    //         'payment_status' => ['required', 'in:unpaid,partial,paid'],
-    //         'payment_method' => ['nullable', 'in:cash,transfer,qris'],
-    //         'payment_amount' => ['nullable', 'numeric', 'min:0'],
-
-    //         'subtotal' => ['required', 'numeric'],
-    //         'total' => ['required', 'numeric'],
-
-    //         'items' => ['required', 'array', 'min:1'],
-    //         'items.*.id' => ['required', 'exists:products,id'],
-    //         'items.*.qty' => ['required', 'integer', 'min:1'],
-    //         'items.*.price' => ['required', 'numeric', 'min:0'],
-
-    //     ]);
-
-    //     $storeId = Auth::user()->store_id;
-
-    //     try {
-    //         DB::beginTransaction();
-    //         $customer = Customer::firstOrCreate(
-    //             ['phone' => $validated['phone']],
-    //             [
-    //                 'name' => $validated['name'],
-    //                 'address' => $validated['address'] ?? null
-    //             ]
-    //         );
-
-    //         if ($validated['payment_status'] == "paid") {
-    //             if (empty($validated['payment_amount']))
-    //                 throw new \Exception("Nominal pembayaran wajib diisi");
-    //             if ($validated['payment_amount'] < $validated['total'])
-    //                 throw new \Exception("Pembayaran kurang dari total");
-    //         }
-
-    //         if ($validated['payment_status'] == "partial") {
-    //             if (empty($validated['payment_amount']))
-    //                 throw new \Exception("Nominal DP wajib diisi");
-    //             if (
-    //                 $validated['payment_amount'] <= 0 ||
-    //                 $validated['payment_amount'] >= $validated['total']
-    //             ) {
-    //                 throw new \Exception("Nominal DP tidak valid");
-    //             }
-    //         }
-
-    //         $transaction = Transaction::create([
-    //             'invoice_number' => 'INV-' . now()->format('ymd') . '-' . strtoupper(Str::random(3)) . now()->format('Hi'),
-    //             'transaction_type' => $validated['transaction_type'],
-    //             'user_id' => Auth::id(),
-    //             'store_id' => $storeId,
-    //             'customer_id' => $customer->id,
-    //             'subtotal' => $validated['subtotal'],
-    //             'shipping_cost' => $validated['shipping_cost'] ?? 0,
-    //             'points_used' => $validated['points_used'] ?? 0,
-    //             'total' => $validated['total'],
-    //             'payment_status' => $validated['payment_status'],
-    //             'delivery_type' => $validated['delivery_type'],
-    //             'notes' => $validated['notes'] ?? null,
-    //         ]);
-
-    //         $isBackorder = $validated['transaction_type'] === 'backorder';
-    //         foreach ($validated['items'] as $item) {
-
-    //             $productStore = DB::table('product_store')
-    //                 ->where('product_id', $item['id'])
-    //                 ->where('store_id', $storeId)
-    //                 ->lockForUpdate()
-    //                 ->first();
-
-    //             if (!$isBackorder) {
-    //                 if (!$productStore) {
-    //                     throw new \Exception(
-    //                         "Produk {$item['id']} tidak tersedia di store."
-    //                     );
-    //                 }
-    //                 if ($item['qty'] > $productStore->stock) {
-    //                     throw new \Exception(
-    //                         "Stock {$item['id']} tidak cukup."
-    //                     );
-    //                 }
-    //             }
-
-    //             $currentStock = $productStore?->stock ?? 0;
-
-    //             $basePrice = $productStore?->price ?? 0;
-    //             $discount = $productStore?->discount ?? 0;
-
-    //             TransactionItem::create([
-    //                 'transaction_id' => $transaction->id,
-    //                 'product_id' => $item['id'],
-    //                 'quantity' => $item['qty'],
-
-    //                 'stock_at_transaction' => $currentStock,
-
-    //                 'base_price' => $basePrice,
-    //                 'price' => $item['price'],
-    //                 'discount' => $discount,
-
-    //                 'subtotal' => $item['qty'] * $item['price'],
-    //             ]);
-
-    //             // HANYA NORMAL yang mengurangi stock
-    //             if (!$isBackorder) {
-    //                 DB::table('product_store')
-    //                     ->where('product_id', $item['id'])
-    //                     ->where('store_id', $storeId)
-    //                     ->decrement('stock', $item['qty']);
-    //             }
-    //         }
-
-    //         if (
-    //             in_array($validated['payment_status'], ['paid', 'partial'])
-    //             && !empty($validated['payment_amount'])
-    //         ) {
-    //             Payment::create([
-    //                 'transaction_id' => $transaction->id,
-    //                 'user_id' => Auth::id(),
-    //                 'amount' => $validated['payment_amount'],
-    //                 'payment_method' => $validated['payment_method']
-    //             ]);
-    //         }
-
-    //         $customer = Customer::lockForUpdate()->find($customer->id);
-    //         // $setting = PointSetting::where('is_active', true)->first();
-
-    //         if (
-    //             $transaction->points_used > 0 &&
-    //             $customer->current_point >= $transaction->points_used
-    //         ) {
-    //             $customer->decrement(
-    //                 'current_point',
-    //                 $transaction->points_used
-    //             );
-
-    //             CustomerPoint::create([
-    //                 'customer_id' => $customer->id,
-    //                 'points' => $transaction->points_used,
-    //                 'type' => 'redeem',
-    //                 'reference' => $transaction->invoice_number
-    //             ]);
-    //         }
-    //         //tambahan 
-    //         if ($transaction->payment_status === 'paid') {
-    //             $this->giveCustomerPoint($transaction);
-    //         }
-    //         //tambahan
-
-    //         DB::commit();
-
-    //         return response()->json([
-    //             'success' => true,
-    //             'message' => '   ',
-    //             'invoice' => $transaction->invoice_number,
-    //             'transaction_id' => $transaction->id
-    //         ]);
-    //     } catch (\Throwable $e) {
-
-    //         DB::rollBack();
-
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => $e->getMessage()
-    //         ], 422);
-    //     }
-    // }
-
-    // public function store(Request $request)
-    // {
-    //     $validated = $request->validate([
-    //         'name' => ['required', 'string', 'max:255'],
-    //         'phone' => ['required', 'string', 'max:20'],
-    //         'address' => ['nullable', 'string'],
-
-    //         'delivery_type' => ['required', 'in:pickup,delivery'],
-    //         'shipping_cost' => ['nullable', 'numeric', 'min:0'],
-    //         'points_used' => ['nullable', 'numeric', 'min:0'],
-    //         'notes' => ['nullable', 'string'],
-
-    //         'payment_status' => ['required', 'in:unpaid,partial,paid'],
-    //         'payment_method' => ['nullable', 'in:cash,transfer,qris'],
-    //         'payment_amount' => ['nullable', 'numeric', 'min:0'],
-
-    //         'subtotal' => ['required', 'numeric'],
-    //         'total' => ['required', 'numeric'],
-
-    //         'items' => ['required', 'array', 'min:1'],
-    //         'items.*.id' => ['required', 'exists:products,id'],
-    //         'items.*.qty' => ['required', 'integer', 'min:1'],
-    //         'items.*.price' => ['required', 'numeric', 'min:0'],
-
-    //     ]);
-    //     $storeId = Auth::user()->store_id;
-
-    //     try {
-    //         DB::beginTransaction();
-    //         $customer = Customer::firstOrCreate(
-    //             ['phone' => $validated['phone']],
-    //             [
-    //                 'name' => $validated['name'],
-    //                 'address' => $validated['address'] ?? null
-    //             ]
-    //         );
-
-    //         if ($validated['payment_status'] == "paid") {
-    //             if (empty($validated['payment_amount']))
-    //                 throw new \Exception("Nominal pembayaran wajib diisi");
-    //             if ($validated['payment_amount'] < $validated['total'])
-    //                 throw new \Exception("Pembayaran kurang dari total");
-    //         }
-
-    //         if ($validated['payment_status'] == "partial") {
-    //             if (empty($validated['payment_amount']))
-    //                 throw new \Exception("Nominal DP wajib diisi");
-    //             if (
-    //                 $validated['payment_amount'] <= 0 ||
-    //                 $validated['payment_amount'] >= $validated['total']
-    //             ) {
-    //                 throw new \Exception("Nominal DP tidak valid");
-    //             }
-    //         }
-
-    //         $transaction = Transaction::create([
-    //             'invoice_number' => 'INV-' . now()->format('ymd') . '-' . strtoupper(Str::random(3)) . now()->format('Hi'),
-    //             'user_id' => Auth::id(),
-    //             'store_id' => $storeId,
-    //             'customer_id' => $customer->id,
-    //             'subtotal' => $validated['subtotal'],
-    //             'shipping_cost' => $validated['shipping_cost'] ?? 0,
-    //             'points_used' => $validated['points_used'] ?? 0,
-    //             'total' => $validated['total'],
-    //             'payment_status' => $validated['payment_status'],
-    //             'delivery_type' => $validated['delivery_type'],
-    //             'notes' => $validated['notes'] ?? null,
-    //         ]);
-
-    //         foreach ($validated['items'] as $item) {
-
-    //             $productStore = DB::table('product_store')
-    //                 ->where('product_id', $item['id'])
-    //                 ->where('store_id', $storeId)
-    //                 ->lockForUpdate()
-    //                 ->first();
-
-    //             if (!$productStore)
-    //                 throw new \Exception("Produk tidak tersedia");
-    //             if ($item['qty'] > $productStore->stock)
-    //                 throw new \Exception("Stock {$item['id']} tidak cukup");
-
-    //             TransactionItem::create([
-    //                 'transaction_id' => $transaction->id,
-    //                 'product_id' => $item['id'],
-    //                 'quantity' => $item['qty'],
-    //                 'base_price' => $productStore->price,
-    //                 'price' => $item['price'],
-    //                 'discount' => $productStore->discount,
-    //                 'subtotal' => $item['qty'] * $item['price']
-    //             ]);
-
-    //             DB::table('product_store')
-    //                 ->where('product_id', $item['id'])
-    //                 ->where('store_id', $storeId)
-    //                 ->decrement('stock', $item['qty']);
-    //         }
-
-    //         if (
-    //             in_array($validated['payment_status'], ['paid', 'partial'])
-    //             && !empty($validated['payment_amount'])
-    //         ) {
-    //             Payment::create([
-    //                 'transaction_id' => $transaction->id,
-    //                 'user_id' => Auth::id(),
-    //                 'amount' => $validated['payment_amount'],
-    //                 'payment_method' => $validated['payment_method']
-    //             ]);
-    //         }
-
-    //         $customer = Customer::lockForUpdate()->find($customer->id);
-    //         // $setting = PointSetting::where('is_active', true)->first();
-
-    //         if (
-    //             $transaction->points_used > 0 &&
-    //             $customer->current_point >= $transaction->points_used
-    //         ) {
-    //             $customer->decrement(
-    //                 'current_point',
-    //                 $transaction->points_used
-    //             );
-
-    //             CustomerPoint::create([
-    //                 'customer_id' => $customer->id,
-    //                 'points' => $transaction->points_used,
-    //                 'type' => 'redeem',
-    //                 'reference' => $transaction->invoice_number
-    //             ]);
-    //         }
-    //         //tambahan 
-    //         if ($transaction->payment_status === 'paid') {
-    //             $this->giveCustomerPoint($transaction);
-    //         }
-    //         //tambahan
-
-    //         DB::commit();
-
-    //         return response()->json([
-    //             'success' => true,
-    //             'message' => '   ',
-    //             'invoice' => $transaction->invoice_number,
-    //             'transaction_id' => $transaction->id
-    //         ]);
-    //     } catch (\Throwable $e) {
-
-    //         DB::rollBack();
-
-    //         return response()->json([
-    //             'success' => false,
-    //             'message' => $e->getMessage()
-    //         ], 422);
-    //     }
-    // }
-
-    public function search(Request $request)
-    {
-        $search = $request->search;
-
-        return Customer::query()
-            ->when($search, function ($q) use ($search) {
-
-                $q->where(function ($query) use ($search) {
-
-                    $query
-                        ->where('name', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%");
-                });
-            })
-            ->latest()
-            ->limit(10)
-            ->get([
-                'id',
-                'name',
-                'phone',
-                'address',
-                'current_point',
-            ]);
     }
 
     public function addPayment(Request $request, Transaction $transaction)
@@ -701,12 +579,6 @@ class CashierController extends Controller
             'payment_method' => ['required', 'in:cash,transfer,qris'],
             'amount' => ['required', 'numeric', 'min:1'],
         ]);
-        // if (
-        //     $validated['delivery_type'] === 'delivery'
-        //     && empty($validated['driver_name'])
-        // ) {
-        //     throw new \Exception("Driver wajib diisi.");
-        // }
 
         if (
             $validated['delivery_type'] === 'delivery'
@@ -738,7 +610,8 @@ class CashierController extends Controller
             $transaction->total =
                 $transaction->subtotal +
                 $transaction->shipping_cost -
-                ($transaction->points_used ?? 0);
+                ($transaction->points_used ?? 0) -
+                ($transaction->nego ?? 0);
 
             $paid = $transaction->payments()->sum('amount');
             $remaining = $transaction->total - $paid;
@@ -772,9 +645,7 @@ class CashierController extends Controller
                 $transaction->payment_status = "paid";
             }
 
-            //update done
             $transaction->save();
-
 
             if ($transaction->payment_status === 'paid') {
                 $this->giveCustomerPoint($transaction);
@@ -841,4 +712,6 @@ class CashierController extends Controller
             'reference' => $transaction->invoice_number,
         ]);
     }
+
+   
 }

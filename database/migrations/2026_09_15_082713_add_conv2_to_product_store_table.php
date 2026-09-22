@@ -11,15 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('app_versions', function (Blueprint $table) {
-            $table->id();
-
-            $table->string('version');
-            $table->string('apk_url');
-            $table->boolean('force_update')->default(false);
-            $table->text('message')->nullable();
-
-            $table->timestamps();
+        Schema::table('product_store', function (Blueprint $table) {
+            $table->string('conv2')->after('stock')->nullable();
         });
     }
 
@@ -28,6 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('app_versions');
+        Schema::table('product_store', function (Blueprint $table) {
+            $table->dropColumn('conv2');
+        });
     }
 };

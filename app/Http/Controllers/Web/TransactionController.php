@@ -7,7 +7,10 @@ use App\Http\Requests\Web\ProcessTransactionRequest;
 use App\Http\Resources\Web\MutasiTransactionResource;
 use App\Http\Resources\Web\TransactionDetailResource;
 use App\Http\Resources\Web\TransactionResource;
+use App\Models\Customer;
+use App\Models\CustomerPoint;
 use App\Models\Payment;
+use App\Models\ProductStore;
 use App\Models\StockMutationHistory;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
@@ -562,5 +565,190 @@ class TransactionController extends Controller
         return response()->json([
             'data' => $histories,
         ]);
+    }
+
+
+    public function destroy(Request $request, $id)
+    {
+        DB::beginTransaction();
+
+        try {
+            $user = $request->user();
+
+            /*
+        |--------------------------------------------------------------------------
+        | 1. Ambil transaksi + lock
+        |--------------------------------------------------------------------------
+        */
+            $transaction = Transaction::query()
+                ->where('id', $id)
+                ->where('store_id', $user->store_id)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$transaction) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi tidak ditemukan',
+                ], 404);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | 2. Ambil customer dan lock
+        |--------------------------------------------------------------------------
+        */
+            $customer = null;
+
+            if ($transaction->customer_id) {
+                $customer = Customer::query()
+                    ->lockForUpdate()
+                    ->find($transaction->customer_id);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | 3. Ambil semua transaction items
+        |--------------------------------------------------------------------------
+        */
+            $items = TransactionItem::query()
+                ->where('transaction_id', $transaction->id)
+                ->lockForUpdate()
+                ->get();
+
+            /*
+        |--------------------------------------------------------------------------
+        | 4. Kembalikan stok
+        |--------------------------------------------------------------------------
+        |
+        | qty_unit adalah jumlah PCS yang sebenarnya mengurangi stock.
+        |
+        */
+            foreach ($items->groupBy('product_id') as $productId => $productItems) {
+
+                $restoreQty = $productItems
+                    ->filter(function ($item) {
+                        return in_array(
+                            $item->fulfillment_status,
+                            ['fulfilled', 'ready'],
+                            true
+                        );
+                    })
+                    ->sum(function ($item) {
+                        return (int) $item->qty_unit;
+                    });
+
+                if ($restoreQty <= 0) {
+                    continue;
+                }
+
+                $productStore = ProductStore::query()
+                    ->where('product_id', $productId)
+                    ->where('store_id', $transaction->store_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$productStore) {
+                    throw new \Exception(
+                        "Data stok produk ID {$productId} di toko tidak ditemukan"
+                    );
+                }
+
+                $productStore->increment('stock', $restoreQty);
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | 5. Kembalikan customer point
+        |--------------------------------------------------------------------------
+        |
+        | Kita lihat ledger customer_points berdasarkan invoice.
+        |
+        | redeem  -> point dikembalikan
+        | earn    -> point yang pernah diberikan dibatalkan
+        |
+        */
+            if ($customer) {
+
+                $pointHistories = CustomerPoint::query()
+                    ->where('customer_id', $customer->id)
+                    ->where('reference', $transaction->invoice_number)
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($pointHistories as $pointHistory) {
+
+                    $points = abs((int) $pointHistory->points);
+
+                    if ($pointHistory->type === 'redeem') {
+
+                        // Point yang sebelumnya dipakai dikembalikan
+                        $customer->increment(
+                            'current_point',
+                            $points
+                        );
+                    } elseif ($pointHistory->type === 'earn') {
+
+                        // Point yang sebelumnya didapat dari transaksi dibatalkan
+                        if ($customer->current_point < $points) {
+                            throw new \Exception(
+                                'Point customer tidak mencukupi untuk membatalkan point transaksi'
+                            );
+                        }
+
+                        $customer->decrement(
+                            'current_point',
+                            $points
+                        );
+                    }
+                }
+
+                /*
+            |--------------------------------------------------------------------------
+            | Hapus histori point transaksi
+            |--------------------------------------------------------------------------
+            */
+                if ($pointHistories->isNotEmpty()) {
+                    CustomerPoint::query()
+                        ->whereIn(
+                            'id',
+                            $pointHistories->pluck('id')
+                        )
+                        ->delete();
+                }
+            }
+
+            /*
+        |--------------------------------------------------------------------------
+        | 8. Hapus transaksi
+        |--------------------------------------------------------------------------
+        */
+            $invoiceNumber = $transaction->invoice_number;
+
+            $transaction->delete();
+
+            /*
+        |--------------------------------------------------------------------------
+        | 9. Commit
+        |--------------------------------------------------------------------------
+        */
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transaksi berhasil dibatalkan dan seluruh data terkait telah dikembalikan',
+                'data' => [
+                    'invoice_number' => $invoiceNumber,
+                ],
+            ], 200);
+        } catch (\Throwable $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 }

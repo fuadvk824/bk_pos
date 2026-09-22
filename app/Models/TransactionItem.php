@@ -10,6 +10,9 @@ class TransactionItem extends Model
         'transaction_id',
         'product_id',
         'quantity',
+        'qty_unit',
+        'satuan_unit',
+        
         'stock_at_transaction',
         'fulfillment_status',
         'base_price',

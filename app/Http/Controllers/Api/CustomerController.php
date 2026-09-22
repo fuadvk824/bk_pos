@@ -45,4 +45,3 @@ class CustomerController extends Controller
         return CustomerResource::collection($customers);
     }
 }
- 

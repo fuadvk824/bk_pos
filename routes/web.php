@@ -55,6 +55,11 @@ Route::middleware(['auth', 'verified', 'role:super-admin|admin'])->group(functio
                 '/{transaction}/mutation-history',
                 [TransactionController::class, 'mutationHistory']
             )->name('mutation-history');
+
+            Route::delete(
+                '/{transaction}',
+                [TransactionController::class, 'destroy']
+            )->name('destroy');
         });
 
     Route::prefix('cashier')

@@ -13,39 +13,6 @@ use Illuminate\Support\Facades\DB;
 
 class TransactionController extends Controller
 {
-    // public function index(Request $request)
-    // {
-    //     $user = $request->user();
-
-    //     $month = $request->integer('month');
-    //     $year  = $request->integer('year');
-
-    //     $transactions = Transaction::query()
-    //         ->with([
-    //             'customer:id,name',
-    //             // 'store:id,name',
-    //         ])
-    //         ->withSum('payments', 'amount')
-    //         ->when(
-    //             $user->store_id,
-    //             fn($q) => $q->where('store_id', $user->store_id)
-    //         )
-    //         ->when(
-    //             $year,
-    //             fn($q) => $q->whereYear('created_at', $year)
-    //         )
-    //         ->when(
-    //             $month,
-    //             fn($q) => $q->whereMonth('created_at', $month)
-    //         )
-    //         ->latest()
-    //         ->limit(
-    //             $request->integer('limit', 50)
-    //         )
-    //         ->get();
-
-    //     return TreansactionResource::collection($transactions);
-    // }
     public function index(Request $request)
     {
         $user = $request->user();
@@ -54,14 +21,19 @@ class TransactionController extends Controller
         $endDate   = $request->input('end_date');
 
         $transactions = Transaction::query()
-            ->with([
-                'customer:id,name',
-            ])
+            ->with(['customer:id,name'])
             ->withSum('payments', 'amount')
 
             ->when(
                 $user->store_id,
                 fn($q) => $q->where('store_id', $user->store_id)
+            )
+
+            ->when(
+                !$startDate && !$endDate,
+                fn($q) => $q
+                    ->where('created_at', '>=', now()->startOfMonth())
+                    ->where('created_at', '<=', now()->endOfMonth())
             )
 
             ->when(
@@ -83,11 +55,6 @@ class TransactionController extends Controller
             )
 
             ->latest()
-
-            ->limit(
-                $request->integer('limit', 50)
-            )
-
             ->get();
 
         return TreansactionResource::collection($transactions);

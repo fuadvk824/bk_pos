@@ -83,23 +83,6 @@ class PriceSeeder extends Seeder
                         continue;
                     }
 
-                    $unit = $data['unit'] ?? null;
-
-                    if ($unit) {
-
-                        DB::table('products')
-                            ->where('id', $ps->product_id)
-                            ->where(function ($query) use ($unit) {
-                                $query
-                                    ->whereNull('unit')
-                                    ->orWhere('unit', '!=', $unit);
-                            })
-                            ->update([
-                                'unit'       => $unit,
-                                'updated_at' => now(),
-                            ]);
-                    }
-
                     if (!isset($data['prices'])) {
                         continue;
                     }

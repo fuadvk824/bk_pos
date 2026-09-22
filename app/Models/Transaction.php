@@ -16,12 +16,14 @@ class Transaction extends Model
         'subtotal',
         'shipping_cost',
         'points_used',
+        'nego',
         'total',
 
         'payment_status',
         'delivery_type',
         'driver_name',
-        'notes'
+        'notes',
+        'since',
     ];
 
     public function items()

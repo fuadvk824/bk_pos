@@ -20,6 +20,7 @@ class TreansactionDetailResource extends JsonResource
             'invoice_number' => $this->invoice_number,
             'payment_status' => $this->payment_status,
             'created_at' => $this->created_at?->format('d-m-Y H:i'),
+            // 'created_at' => ($this->since ?? $this->created_at)?->format('d-m-Y H:i'),
             'delivery_type' => $this->delivery_type,
             'driver_name' => $this->driver_name,
             'notes' => $this->notes,
@@ -29,6 +30,7 @@ class TreansactionDetailResource extends JsonResource
             'subtotal' => $this->subtotal,
             'shipping_cost' => $this->shipping_cost,
             'points_used' => $this->points_used,
+            'nego' => $this->nego,
             'total' => $this->total,
             'remaining_amount' => max(
                 0,
@@ -61,8 +63,11 @@ class TreansactionDetailResource extends JsonResource
                         'product_name' => $item->product?->name,
                         'product_code' => $item->product?->product_code,
                         'unit' => $item->product?->unit,
+                        // 'unit2' => $item->product?->unit2,
 
                         'quantity' => $item->quantity,
+                        'qty_unit' => $item->qty_unit,
+                        'satuan_unit' => $item->satuan_unit,
                         'base_price' => $item->base_price,
                         'price' => $item->price,
                         'discount' => $item->discount,

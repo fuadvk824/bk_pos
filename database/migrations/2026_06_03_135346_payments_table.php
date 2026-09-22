@@ -23,8 +23,7 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             $table->decimal('amount', 14, 2);
-            // $table->decimal('received_amount', 14, 2)->nullable();
-            // $table->decimal('change_amount', 14, 2)->default(0);
+            
             $table->enum('payment_method', ['cash', 'transfer', 'qris'])->index();
             
             $table->timestamp('paid_at')->useCurrent();

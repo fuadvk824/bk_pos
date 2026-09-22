@@ -168,6 +168,4 @@ function CartItemCard({
     );
 }
 
-
-
 export default memo(CartItemCard);

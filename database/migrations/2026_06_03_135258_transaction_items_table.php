@@ -27,13 +27,6 @@ return new class extends Migration
 
             $table->integer('quantity');
             
-            // $table->integer('stock_at_transaction')->default(0);
-            // $table->enum('fulfillment_status', [
-            //     'ready',
-            //     'waiting_stock',
-            //     'fulfilled',
-            // ])->default('ready')->index();
-
             $table->decimal('base_price', 12, 2);
             $table->decimal('price', 12, 2);
             $table->decimal('discount', 14, 2)->default(0);

@@ -12,6 +12,7 @@ class Product extends Model
         'name',
         'description',
         'unit',
+        'unit2',
         'stock_all',
         'image',
         'barcode'

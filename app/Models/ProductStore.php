@@ -12,6 +12,7 @@ class ProductStore extends Model
         'product_id',
         'store_id',
         'stock',
+        'conv2',
         'price',
         'price_all',
         'discount',

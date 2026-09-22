@@ -1,32 +1,17 @@
 
 <?php
 
+use App\Http\Controllers\Api\AppVersionController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashierController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\UserController;
-use App\Models\AppVersion;
+use App\Http\Controllers\Api\WilayahController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/app-version', function () {
-    $version = AppVersion::where('force_update', true)->first();
-
-    if (!$version) {
-        return response()->json([
-            'message' => 'Versi aplikasi tidak ditemukan'
-        ], 404);
-    }
-
-    return response()->json([
-        'version'      => $version->version,
-        'apk_url'      => $version->apk_url,
-        'force_update' => $version->force_update,
-        'message'      => $version->message,
-    ]);
-});
-
+Route::get('/app-version', [AppVersionController::class, 'latest']);
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -41,22 +26,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/transactions', [TransactionController::class, 'index']);
     Route::get('/transactions/{transaction}', [TransactionController::class, 'show']);
-    Route::post(
-        '/transactions/{transaction}/items',
-        [TransactionController::class, 'addItem']
-    );
-    Route::patch(
-        '/transactions/{transaction}/driver',
-        [TransactionController::class, 'updateDriver']
-    );
-    Route::patch(
-        '/transactions/{transaction}/notes',
-        [TransactionController::class, 'updateNotes']
-    );
+    Route::post('/transactions/{transaction}/items', [TransactionController::class, 'addItem']);
+    Route::patch('/transactions/{transaction}/driver', [TransactionController::class, 'updateDriver']);
+    Route::patch('/transactions/{transaction}/notes', [TransactionController::class, 'updateNotes']);
 
     Route::post('/checkout', [CashierController::class, 'store']);
     Route::get('/customers/search', [CashierController::class, 'search']);
     Route::post('/transactions/{transaction}/payment', [CashierController::class, 'addPayment']);
 
     Route::get('/customers', [CustomerController::class, 'index']);
+
+    Route::get('/wilayah/provinsi', [WilayahController::class, 'provinsi']);
+    Route::get('/wilayah/kabupaten', [WilayahController::class, 'kabupaten']);
+    Route::get('/wilayah/kecamatan', [WilayahController::class, 'kecamatan']);
+    Route::get('/wilayah/desa', [WilayahController::class, 'desa']);
 });
