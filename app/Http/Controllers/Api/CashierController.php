@@ -186,11 +186,14 @@ class CashierController extends Controller
                 $customer = null;
 
                 if ($phone) {
-                    $customer = Customer::where('phone', $phone)->first();
+                    $customer = Customer::where('store_id', $user->store_id)
+                        ->where('phone', $phone)
+                        ->first();
                 }
 
                 if (!$customer) {
                     $customer = Customer::create([
+                         'store_id' => $user->store_id,
                         'name' => $name,
                         'phone' => $phone,
                         'address' => $fullAddress,
@@ -712,6 +715,4 @@ class CashierController extends Controller
             'reference' => $transaction->invoice_number,
         ]);
     }
-
-   
 }
