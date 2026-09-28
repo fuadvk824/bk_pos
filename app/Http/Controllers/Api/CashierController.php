@@ -24,11 +24,11 @@ class CashierController extends Controller
 {
     public function search(Request $request)
     {
-        // $user = $request->user();
+        $user = $request->user();
         $search = $request->search;
 
         return Customer::query()
-            // ->where('store_id', $user->store_id)
+            ->where('store_id', $user->store_id)
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($query) use ($search) {
                     $query
