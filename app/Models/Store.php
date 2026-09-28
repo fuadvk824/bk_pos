@@ -41,4 +41,9 @@ class Store extends Model
     {
         return $this->hasMany(StoreTarget::class);
     }
+
+    public function customers()
+    {
+        return $this->hasMany(Customer::class);
+    }
 }

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Customer extends Model
 {
     protected $fillable = [
+        'store_id',
         'name',
         'phone',
         'address',
@@ -22,5 +23,8 @@ class Customer extends Model
     {
         return $this->hasMany(Transaction::class);
     }
-
+    public function store()
+    {
+        return $this->belongsTo(Store::class);
+    }
 }
