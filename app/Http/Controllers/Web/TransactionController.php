@@ -573,31 +573,20 @@ class TransactionController extends Controller
         DB::beginTransaction();
 
         try {
-            $user = $request->user();
 
-            /*
-        |--------------------------------------------------------------------------
-        | 1. Ambil transaksi + lock
-        |--------------------------------------------------------------------------
-        */
             $transaction = Transaction::query()
                 ->where('id', $id)
-                ->where('store_id', $user->store_id)
                 ->lockForUpdate()
                 ->first();
 
             if (!$transaction) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Transaksi tidak ditemukan',
-                ], 404);
+                DB::rollBack();
+
+                return redirect()
+                    ->back()
+                    ->with('error', 'Transaksi tidak ditemukan.');
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | 2. Ambil customer dan lock
-        |--------------------------------------------------------------------------
-        */
             $customer = null;
 
             if ($transaction->customer_id) {
@@ -606,24 +595,11 @@ class TransactionController extends Controller
                     ->find($transaction->customer_id);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | 3. Ambil semua transaction items
-        |--------------------------------------------------------------------------
-        */
             $items = TransactionItem::query()
                 ->where('transaction_id', $transaction->id)
                 ->lockForUpdate()
                 ->get();
 
-            /*
-        |--------------------------------------------------------------------------
-        | 4. Kembalikan stok
-        |--------------------------------------------------------------------------
-        |
-        | qty_unit adalah jumlah PCS yang sebenarnya mengurangi stock.
-        |
-        */
             foreach ($items->groupBy('product_id') as $productId => $productItems) {
 
                 $restoreQty = $productItems
@@ -650,24 +626,14 @@ class TransactionController extends Controller
 
                 if (!$productStore) {
                     throw new \Exception(
-                        "Data stok produk ID {$productId} di toko tidak ditemukan"
+                        "Data stok produk ID {$productId} " .
+                            "di toko ID {$transaction->store_id} tidak ditemukan"
                     );
                 }
 
                 $productStore->increment('stock', $restoreQty);
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | 5. Kembalikan customer point
-        |--------------------------------------------------------------------------
-        |
-        | Kita lihat ledger customer_points berdasarkan invoice.
-        |
-        | redeem  -> point dikembalikan
-        | earn    -> point yang pernah diberikan dibatalkan
-        |
-        */
             if ($customer) {
 
                 $pointHistories = CustomerPoint::query()
@@ -682,14 +648,12 @@ class TransactionController extends Controller
 
                     if ($pointHistory->type === 'redeem') {
 
-                        // Point yang sebelumnya dipakai dikembalikan
                         $customer->increment(
                             'current_point',
                             $points
                         );
                     } elseif ($pointHistory->type === 'earn') {
 
-                        // Point yang sebelumnya didapat dari transaksi dibatalkan
                         if ($customer->current_point < $points) {
                             throw new \Exception(
                                 'Point customer tidak mencukupi untuk membatalkan point transaksi'
@@ -703,11 +667,6 @@ class TransactionController extends Controller
                     }
                 }
 
-                /*
-            |--------------------------------------------------------------------------
-            | Hapus histori point transaksi
-            |--------------------------------------------------------------------------
-            */
                 if ($pointHistories->isNotEmpty()) {
                     CustomerPoint::query()
                         ->whereIn(
@@ -718,37 +677,28 @@ class TransactionController extends Controller
                 }
             }
 
-            /*
-        |--------------------------------------------------------------------------
-        | 8. Hapus transaksi
-        |--------------------------------------------------------------------------
-        */
             $invoiceNumber = $transaction->invoice_number;
 
             $transaction->delete();
 
-            /*
-        |--------------------------------------------------------------------------
-        | 9. Commit
-        |--------------------------------------------------------------------------
-        */
             DB::commit();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Transaksi berhasil dibatalkan dan seluruh data terkait telah dikembalikan',
-                'data' => [
-                    'invoice_number' => $invoiceNumber,
-                ],
-            ], 200);
+            return redirect()
+                ->back()
+                ->with(
+                    'success',
+                    "Transaksi {$invoiceNumber} berhasil dibatalkan dan seluruh data terkait telah dikembalikan."
+                );
         } catch (\Throwable $e) {
 
             DB::rollBack();
 
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 422);
+            return redirect()
+                ->back()
+                ->with(
+                    'error',
+                    $e->getMessage()
+                );
         }
     }
 }

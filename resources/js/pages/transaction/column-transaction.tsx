@@ -7,6 +7,7 @@ import { Eye, Wallet, ArrowRight, Trash2 } from 'lucide-react';
 import { useRoute } from '@/lib/route-ziggy';
 import { Transaction } from '@/types/custom/transaction';
 import { formatRupiah } from '@/lib/format-rupiah';
+import { toast } from 'sonner';
 
 export const columnTransactions = (
     onProcess?: (transaction: Transaction) => void,
@@ -70,6 +71,16 @@ export const columnTransactions = (
 
                 router.delete(route('transaction.destroy', transaction.id), {
                     preserveScroll: true,
+
+                    onSuccess: () => {
+                        toast.success(
+                            `Transaksi ${transaction.invoice_number} berhasil dihapus.`,
+                        );
+                    },
+
+                    onError: () => {
+                        toast.error('Gagal menghapus transaksi.');
+                    },
                 });
             };
 
