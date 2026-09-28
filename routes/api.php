@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WilayahController;
 use Illuminate\Support\Facades\Route;
 
+/*
 Route::get('/app-version', [AppVersionController::class, 'latest']);
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -41,3 +42,4 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/wilayah/kecamatan', [WilayahController::class, 'kecamatan']);
     Route::get('/wilayah/desa', [WilayahController::class, 'desa']);
 });
+*/
