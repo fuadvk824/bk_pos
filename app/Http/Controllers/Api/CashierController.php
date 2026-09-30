@@ -193,7 +193,7 @@ class CashierController extends Controller
 
                 if (!$customer) {
                     $customer = Customer::create([
-                         'store_id' => $user->store_id,
+                        'store_id' => $user->store_id,
                         'name' => $name,
                         'phone' => $phone,
                         'address' => $fullAddress,

@@ -136,7 +136,7 @@ class ProductSeeder extends Seeder
                         ->where('product_id', $product->id)
                         ->where('store_id', $store->id)
                         ->update([
-                            'stock'      => $stock,
+                            // 'stock'      => $stock,
                             'conv2'      => $conv2,
                             'price_all'  => $priceAll,
                             'updated_at' => $now,
