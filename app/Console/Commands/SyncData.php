@@ -36,7 +36,7 @@ class SyncData extends Command
             $this->call(PriceSeeder::class);
 
             $this->info('5. Sync Barcode...');
-            // $this->call(Barcode::class);
+            $this->call(Barcode::class);
 
             $this->newLine();
 
