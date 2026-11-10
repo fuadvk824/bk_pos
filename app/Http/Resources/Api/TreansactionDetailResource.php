@@ -19,8 +19,8 @@ class TreansactionDetailResource extends JsonResource
 
             'invoice_number' => $this->invoice_number,
             'payment_status' => $this->payment_status,
-            'created_at' => $this->created_at?->format('d-m-Y H:i'),
-            // 'created_at' => ($this->since ?? $this->created_at)?->format('d-m-Y H:i'),
+            // 'created_at' => $this->created_at?->format('d-m-Y H:i'),
+            'created_at' => $this->since?->format('d-m-Y H:i'),
             'delivery_type' => $this->delivery_type,
             'driver_name' => $this->driver_name,
             'notes' => $this->notes,

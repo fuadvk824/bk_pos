@@ -26,6 +26,15 @@ class Transaction extends Model
         'since',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'since' => 'datetime',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
+        ];
+    }
+
     public function items()
     {
         return $this->hasMany(TransactionItem::class);
