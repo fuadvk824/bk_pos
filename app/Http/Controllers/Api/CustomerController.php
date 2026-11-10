@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 
 class CustomerController extends Controller
 {
+
     public function index(Request $request)
     {
         $storeId = $request->user()->store_id;
@@ -22,26 +23,9 @@ class CustomerController extends Controller
                 });
             })
             ->orderBy('name')
-            ->get();
+            ->paginate(15);
 
         return CustomerResource::collection($customers);
     }
+
 }
-
-// class CustomerController extends Controller
-// {
-//     public function index(Request $request)
-//     {
-//         $customers = Customer::query()
-//             ->when($request->search, function ($q) use ($request) {
-//                 $q->where(function ($query) use ($request) {
-//                     $query->where('name', 'like', "%{$request->search}%")
-//                         ->orWhere('phone', 'like', "%{$request->search}%");
-//                 });
-//             })
-//             ->orderBy('name')
-//             ->get();
-
-//         return CustomerResource::collection($customers);
-//     }
-// }

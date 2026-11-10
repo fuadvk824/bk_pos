@@ -11,9 +11,23 @@ use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
+
     public function index(Request $request)
     {
         $user = $request->user();
+
+        $paginated = ProductStore::query()
+            ->where('store_id', $user->store_id)
+            ->with([
+                'product.category',
+                'product.stores',
+            ])
+            ->orderBy('id')
+            ->paginate(6);
+
+        $productIds = $paginated->getCollection()
+            ->pluck('product_id')
+            ->unique();
 
         $soldProducts = DB::table('transaction_items')
             ->join(
@@ -23,22 +37,15 @@ class ProductController extends Controller
                 'transaction_items.transaction_id'
             )
             ->where('transactions.store_id', $user->store_id)
+            ->whereIn('transaction_items.product_id', $productIds)
             ->select(
                 'transaction_items.product_id',
                 DB::raw('SUM(transaction_items.quantity) as sold')
             )
             ->groupBy('transaction_items.product_id')
-            ->orderByDesc(DB::raw('SUM(transaction_items.quantity)'))
-            ->limit(5)
             ->pluck('sold', 'product_id');
 
-        $products = ProductStore::query()
-            ->where('store_id', $user->store_id)
-            ->with([
-                'product.category',
-                'product.stores',
-            ])
-            ->get()
+        $products = $paginated->getCollection()
             ->map(function ($item) use ($soldProducts) {
 
                 $stores = $item->product->stores
@@ -63,7 +70,6 @@ class ProductController extends Controller
                     'barcode' => $item->product->barcode,
                     'description' => $item->product->description,
 
-                    // Store yang sedang login
                     'price' => (float) $item->price,
                     'discount' => (float) $item->discount,
                     'stock' => (int) $item->stock,
@@ -72,7 +78,6 @@ class ProductController extends Controller
                     'category' => $item->product->category?->name,
                     'sold' => (int) ($soldProducts[$item->product_id] ?? 0),
 
-                    // Semua store
                     'stores' => $stores,
                 ];
             });
@@ -80,6 +85,13 @@ class ProductController extends Controller
         return response()->json([
             'success' => true,
             'data' => $products,
+            'pagination' => [
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'per_page' => $paginated->perPage(),
+                'total' => $paginated->total(),
+                'has_more_pages' => $paginated->hasMorePages(),
+            ],
         ]);
     }
 
